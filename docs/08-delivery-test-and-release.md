@@ -49,7 +49,8 @@ Vercelpreview/prod 분리, Cloudflarequeue/DLQ/secrets, Oraclefirewall+volume+sy
 | S1 | **완료 (mock/demo)** | 2026-10-02 |
 | S2 | **완료** — 사용자가 배포 사이트에서 Google 로그인 성공 확인 | 2026-10-02 |
 | S3 | **완료** — 실제 Firestore CRUD·wizard draft·A/B 격리 통합 테스트 | 2026-10-02 |
-| S4~S8 | 미구현 | — |
+| S4 | **mock 완료 / live 미검증** — 입장요청·운영자 승인·연결코드·서명 ingress·원자적 연결. Oracle relay·Cloudflare Queue 미구현 | 2026-10-03 |
+| S5~S8 | 미구현 | — |
 | S9 | 범위 외 | — |
 
 ### S0 — 미실행
@@ -135,3 +136,25 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 | unit / lint / build | 19 tests 통과 / 통과 / 통과 |
 
 **미실행**: 배포 사이트에서 실제 Google 계정으로 챗봇 생성(사용자 확인 필요). Firebase Emulator 는 JDK 21 필요(이 PC JDK 17)로 미사용 — 대신 실제 프로젝트에 임시 workspace 로 통합 테스트.
+
+### S4 — 방 연결 (2026-10-03, mock 완료 · live 미검증)
+**구현**
+- 고객: 입장 요청(관리 권한·참여자 고지 동의 필수), 연결 코드 발급(운영자 승인 후만, 원문은 응답 1회·서버는 SHA-256 hash, 10분, 재발급 시 이전 폐기, 10분 5회), 방별 보관기간 변경, 연결 대기 5초 poll(탭 비활성 중지, 5분 후 수동).
+- 운영자: 입장 요청 queue·입장 완료/거절(`joins.manage`, 사유 필수, auditLogs). 실제 `/admin/join-requests` 화면. 나머지 실제 운영자 화면은 S6/S7 전까지 "준비 중" 안내.
+- gateway ingress: `/api/internal/gateways/:gw/events|heartbeat` — gateway 별 HMAC(GATEWAY_KEYRING), 5분 시간차, nonce 1회성(`gatewayNonces`). 이벤트는 eventId 로 저장 후 처리(중복은 duplicate). 자기·일반 대화·미연결·일시정지는 LLM 으로 보내지 않음. 호출어는 `jobs/{eventId}` 1개 생성(S5 에서 처리).
+- 원자적 연결 transaction: 미사용·미만료 코드 + 운영자 승인 + bot awaiting_code + 방 미점유 → binding 생성·코드 사용·bot active·연결 안내 outbox. 방 단위 실패 시도 10분 10회 제한.
+- 콘솔: 실제 방·입장 요청·heartbeat 기반 gateway 상태(30초 주기, 90초 지연, 180초 오프라인, 없으면 unknown).
+- 도구: `node gateway/mock-gateway.ts`(실제 relay 와 같은 계약), `npm run admin:grant -- <email> <role>`, `npm run e2e:connection`.
+- 편차: Cloudflare Worker + Queue 대신 web ingress 가 저장 후 동기 처리(MVP). Oracle relay(SQLite inbox/outbox)는 미구현.
+
+**검증**
+| 명령/방법 | 결과 |
+|---|---|
+| `npm test` | 23 tests 통과 (서명: 정상/변조/다른 키/누락/시간차/keyring) |
+| `npm run test:integration` | 17 tests 통과 — 승인 전 코드 발급 불가, B 의 A 봇 입장요청 404, **같은 코드 동시 2개 방 → binding 1개**, 연결된 방을 다른 고객 코드로 점유 불가, 만료·잘못된 코드 거절, 중복 이벤트 1회 처리, 일반·자기·미연결 무시, 호출어 job 1개, 일시정지 봇 무시 |
+| `npm run e2e:connection` (로컬 dev, 테스트 계정 생성 후 삭제) | 13단계 ALL PASSED — 생성 → 승인 전 코드 409 → 입장요청 → 운영자 queue 노출 → 승인 → 코드 발급 → 서명된 mock 이벤트로 연결 → active → 코드 재사용 거절 → 호출어 job → 잡담 무시 → 연결 안내 outbox 1건 → 위조 서명 401 |
+| 배포 사이트 curl | 입장요청·운영자 queue 세션 없이 401, 미서명 gateway 요청 401(unknown_gateway) |
+
+**미실행 / 필요한 것**
+- 실제 카카오톡 방 연결(S0/S8): Oracle VM·ReDroid·KakaoTalk·Iris 필요. 배포 환경 gateway 키(`GATEWAY_KEYRING`) Vercel 미설정.
+- 운영자 계정 역할 미부여: `npm run admin:grant -- jejuailabs@gmail.com superadmin` 실행 후 재로그인 필요.
