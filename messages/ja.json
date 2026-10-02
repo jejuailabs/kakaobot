@@ -713,7 +713,45 @@
       "applied": "背景を適用しました",
       "demoApplyNote": "デモでは運営者画面の一覧だけが変わり、実際のサイト背景は変わりません。",
       "deleted": "背景を削除しました",
-      "tooComplex": "画像が複雑すぎて容量の基準を満たせません。別の画像をお使いください。"
+      "tooComplex": "画像が複雑すぎて容量の基準を満たせません。別の画像をお使いください。",
+      "aiReady": "利用可能",
+      "aiNote": "{theme}テーマ用の背景をlow品質で作成し、下書きに追加します。適用するまでお客様の画面は変わりません。",
+      "scene": "風景",
+      "palette": "色調",
+      "palettes": {
+        "teal": "ティール",
+        "lavender": "ラベンダー",
+        "sunset": "夕焼け"
+      },
+      "season": "季節",
+      "seasons": {
+        "any": "指定なし",
+        "spring": "春",
+        "summer": "夏",
+        "autumn": "秋",
+        "winter": "冬"
+      },
+      "customPrompt": "追加の指示（任意）",
+      "customPlaceholder": "例：霧のかかった早朝",
+      "generating": "生成中…（10〜30秒）",
+      "genReady": "AI背景を下書きに追加しました",
+      "genUsage": "今月 {count}枚 · {cost} / 予算 {budget}",
+      "genStatus": {
+        "queued": "待機",
+        "generating": "生成中",
+        "processing": "処理中",
+        "ready": "完了",
+        "failed": "失敗"
+      },
+      "genError": {
+        "unknown": "応答がなく結果が不明です。重複課金を防ぐため自動では再生成しません。",
+        "moderation": "画像ポリシーによりブロックされました。追加の指示を変更してください。",
+        "processing": "生成した画像を背景の規格に変換できませんでした。もう一度お試しください。",
+        "other": "生成に失敗しました。しばらくしてからお試しください。"
+      },
+      "genBusy": "すでに生成中の作業があります。終了後にお試しください。",
+      "genBudget": "今月の背景生成予算を超えたため生成できません。",
+      "autoPending": "自動生成スケジュールは準備中です。現在は手動で生成して適用してください。"
     },
     "liveNotReadyTitle": "運営者データは準備中",
     "liveNotReadyDesc": "権限は確認されました。会員・会話・背景などの実データは次の段階(S6・S7)で連携されます。画面構成はデモで確認できます。"

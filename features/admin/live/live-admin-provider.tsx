@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { csrfToken } from "@/lib/client/firebase";
+import type { GenJobView } from "@/lib/shared/appearance-gen";
 import { AdminProvider, type AdminCtx, type AdminRole } from "../admin-context";
 
 async function send(method: string, url: string, body?: unknown) {
@@ -89,6 +90,22 @@ export function LiveAdminProvider({ data, role, children }: { data: AdminCtx["da
           return true;
         } catch {
           return false;
+        }
+      },
+      async generateBackground(requestId, options) {
+        try {
+          const res = await fetch("/api/v1/admin/appearance/generate", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json", "x-katcha-csrf": csrfToken() },
+            body: JSON.stringify({ requestId, options }),
+          });
+          const j = (await res.json().catch(() => null)) as { job?: GenJobView; error?: { messageKey?: string } } | null;
+          done();
+          if (res.ok && j?.job) return { job: j.job };
+          return { error: j?.error?.messageKey ?? "errors.network" };
+        } catch {
+          return { error: "errors.network" };
         }
       },
       // demo 전용 (live 업로드는 uploadFile) / 입장 처리는 별도 화면

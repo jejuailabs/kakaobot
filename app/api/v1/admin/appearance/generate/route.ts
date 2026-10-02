@@ -1,17 +1,22 @@
-import { adminRoute, apiError } from "@/lib/server/api";
+import { adminRoute, apiError, readJson } from "@/lib/server/api";
+import { generateBackground } from "@/lib/server/appearance";
+import { isGenOptions } from "@/lib/shared/appearance-gen";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // provider timeout 90초 × 최대 2회 + 재인코딩
 
 /**
- * AI 배경 생성: 이미지 생성 provider(IMAGE_PROVIDER_API_KEY) 가 설정되지 않으면 미설정으로 응답한다.
- * 업로드는 이와 무관하게 동작한다 (docs/07).
+ * AI 배경 생성 (OpenAI Image API, low 품질). body: { requestId, options:{theme,scene,palette,season,custom} }.
+ * requestId 가 같으면 같은 job 을 돌려준다. 결과는 private draft — 적용은 별도(사유·감사).
+ * provider 미설정이면 503 not_configured, 업로드는 무관하게 동작 (docs/07).
  */
 export const POST = adminRoute(
   "appearance.manage",
-  async () => {
-    if (!process.env.IMAGE_PROVIDER_API_KEY) throw apiError(503, "not_configured", "errors.not_configured");
-    throw apiError(501, "not_configured", "errors.not_configured");
+  async ({ req, user }) => {
+    const b = (await readJson(req)) as { requestId?: unknown; options?: unknown };
+    if (typeof b.requestId !== "string" || !isGenOptions(b.options)) throw apiError(400, "validation", "errors.validation");
+    return { job: await generateBackground(user, b.requestId, b.options) };
   },
   { mutation: true },
 );

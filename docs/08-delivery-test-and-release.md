@@ -52,7 +52,7 @@ Vercelpreview/prod 분리, Cloudflarequeue/DLQ/secrets, Oraclefirewall+volume+sy
 | S4 | **mock 완료 / live 미검증** — 입장요청·운영자 승인·연결코드·서명 ingress·원자적 연결. Oracle relay·Cloudflare Queue 미구현 | 2026-10-03 |
 | S5 | **완료 (로컬 실 API) / 배포 환경 키 미설정** — gpt-6-luna 실제 답변, 한도·예산·로그·outbox | 2026-10-04 |
 | S6 | **완료** — 운영자 현황·회원·대화 로그·감사·실패 작업·게이트웨이 실데이터 | 2026-10-04 |
-| S7 | **완료 (업로드·적용·복원) / AI 생성 미설정** | 2026-10-04 |
+| S7 | **완료 (업로드·적용·복원·AI 수동 생성) / 자동 생성 일정 미구현** | 2026-10-05 |
 | S8 | 미실행 — Oracle·ReDroid·KakaoTalk·Iris 필요 | — |
 | S9 | 범위 외 | — |
 
@@ -230,3 +230,19 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 | unit (`rbac.test.ts`) | OPERATOR_EMAILS: 인증된 Google 이메일만, 미인증·password provider·`…gmail.com.evil.com`·미설정 거부 |
 | `npm run verify` | unit 32 · integration 27 · build 통과 |
 | E2E (dev) | admin ×3, connection, relay 모두 ALL PASSED. Storage 남은 테스트 객체 0 |
+
+### 2026-10-05 변경 — AI 배경 생성 (OpenAI 이미지, low 품질)
+**공식 문서 확인 (2026-10-03, developers.openai.com)**: Image API `v1/images/generations`, 모델 `gpt-image-2.5-flare`(빠른 일상 생성용, 스냅샷 2026-09-08). 가격: 텍스트 입력 $5 / 이미지 출력 $30 per 1M token. 품질별 장당 가격표는 문서에 없어 응답 `usage` 토큰으로 정산.
+**구현**: `lib/server/image-gen.ts`(서버 전용 adapter, `LLM_PROVIDER_API_KEY` 사용, 2048×1152·low·webp) → `generateBackground`(lib/server/appearance.ts): requestId = job ID(같은 요청 재전송 시 같은 job), 사이트당 동시 1 job(lock, 5분 넘은 lock 은 불명 실패로 정리), 월 예산 `IMAGE_MONTHLY_BUDGET_USD`(기본 $5)에서 $0.05 예약 → 실제 usage 로 정산, 대화 비용과 별도(`imageUsageMonthly`). 429/5xx 만 1회 재시도, timeout·연결 끊김은 재시도·재생성 없이 예약액을 비용으로 확정. 결과는 업로드와 같은 검증·재인코딩을 거친 **비공개 draft**(source ai, prompt·모델·비용 기록) — 적용은 기존 적용 흐름(사유·감사). 감사: appearance.generate / appearance.generated. prompt 는 서버가 허용 목록(풍경·색감·계절·테마) + 직접 입력 300자로 합성하고, 글자·로고·UI·사람 없음·중앙 저복잡도 조건을 항상 마지막에 붙임. 운영자 화면 AI 카드: 옵션 선택·생성·이번 달 장수/비용/예산·최근 job 상태. demo 는 계속 "미설정"(가짜 생성 없음).
+**미구현**: 자동 생성 일정(서버 cron·월 4회·자동 적용·대비 검사) — 화면에서 비활성 + "준비 중" 안내. 배포 환경(Vercel)에 `LLM_PROVIDER_API_KEY` 미설정이면 배포 사이트는 "미설정" 표시.
+
+| 검증 | 결과 |
+|---|---|
+| 실측 (스크립트 1회) | low 2048×1152 약 11초, 입력 47·출력 157 token ≈ $0.005 |
+| `tests/integration/appearance-gen.test.ts` (실제 Firestore·Storage, provider mock, 분리된 site 문서) | 6 통과 — 성공 시 비공개 AI draft·비용 4,945 micros 정산·lock 해제, 같은 requestId 재요청 시 provider 재호출 없음, 5xx 1회 재시도·4xx(moderation) 재시도 없음·비용 0, timeout 은 1회 호출 후 불명 실패·예약액 확정, 진행 중 lock 409·오래된 lock 정리 후 진행, 예산 초과 429(provider 미호출) |
+| 같은 파일 실제 provider 테스트 (`LIVE_IMAGE_TEST=1` 일 때만) | 2회 통과 — ready, 비용 5,190 micros, 2048px·133KB |
+| 로컬 dev 서버 HTTP (임시 designer 계정, 확인 후 계정·자산 삭제) | 운영자 배경 화면 200·AI 카드 "사용 가능"·모델 표시, 잘못된 옵션 400, 세션 없음 403, 실제 생성 HTTP 200 12.7초 ready($0.00525), 같은 requestId 재요청 0.66초 같은 job, draft 미리보기 운영자 200 / 비로그인 404 |
+| `npm run verify` | lint·types·unit 34·integration 33(+live 1 skip)·build 통과 |
+| 브라우저 화면 확인 | **미실행** — 같은 폴더에 다른 세션의 dev 서버가 떠 있어 이 세션 브라우저 창에서 열 수 없었음(HTTP 로 렌더 결과만 확인) |
+| 운영 데이터 영향 | 실제 생성 확인 1건의 job·월 비용 기록($0.00525)은 실제 지출이라 `backgroundJobs`·`imageUsageMonthly/current_2026-10` 에 남김. 생성 자산은 삭제 |
+

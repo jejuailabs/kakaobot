@@ -54,7 +54,7 @@ npm run dev
 | `CRON_SECRET` | 매일 만료 데이터 정리 cron 인증 | 필요 |
 | `GATEWAY_KEYRING` | relay 서명 키 `{"gw-01":"..."}` | Oracle relay 설치 시 |
 | `INTERNAL_JOB_SECRET` | 외부에서 job 재처리 호출 시 | 선택 |
-| `IMAGE_PROVIDER_API_KEY` | AI 배경 생성 (미구현, 미설정 표시) | 선택 |
+| `IMAGE_MONTHLY_BUDGET_USD` | AI 배경 생성 월 예산(USD, 기본 5). 생성은 `LLM_PROVIDER_API_KEY` 로 OpenAI `gpt-image-2.5-flare` low 품질 사용, 키 없으면 미설정 표시 | 선택 |
 | `FIREBASE_STORAGE_BUCKET` | 기본값 `<projectId>.firebasestorage.app` | 선택 |
 
 `.env.example` 을 `.env.local` 로 복사해 채운다. 비어 있는 기능은 "미설정"으로 표시되고 demo 는 그대로 동작한다.

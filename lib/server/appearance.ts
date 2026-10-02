@@ -3,8 +3,10 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { unstable_cache } from "next/cache";
 import sharp, { type Sharp } from "sharp";
 import { DEFAULT_APPEARANCE, type AppearanceManifest, type BackgroundVariant } from "@/lib/shared/appearance";
+import { buildBackgroundPrompt, type GenerationInfo, type GenJobStatus, type GenJobView, type GenOptions } from "@/lib/shared/appearance-gen";
 import { apiError } from "./api";
 import { adminBucket, adminDb } from "./firebase-admin";
+import { generateImage, IMAGE_MODEL, ImageGenError, imageCostMicros, isImageGenConfigured } from "./image-gen";
 
 // Liquid Glass 배경 관리 (docs/02, docs/07).
 // 재인코딩된 webp 를 Firebase Storage `backgrounds/{assetId}/{variant}.webp` 에 저장한다.
@@ -43,6 +45,14 @@ async function encodeUnder(img: Sharp, maxBytes: number): Promise<Buffer> {
 
 /** 업로드 처리: 검증 → EXIF 방향 반영 후 메타데이터 제거 → desktop/mobile/thumb 재인코딩 → private draft */
 export async function processUpload(actor: Actor, buf: Buffer, theme: Theme, label: string) {
+  const { id } = await storeAsset(actor, buf, theme, { source: "upload", label: label.slice(0, 60) || "upload" });
+  return { id };
+}
+
+type AssetExtra = { source: "upload" | "ai"; label: string; jobId?: string; prompt?: string; model?: string; costMicros?: number };
+
+/** 공통 처리: 검증 → 재인코딩 → Storage(비공개) → asset 문서 + 감사. 업로드와 AI 생성이 같은 검증·크기 목표를 거친다. */
+async function storeAsset(actor: Actor, buf: Buffer, theme: Theme, extra: AssetExtra) {
   if (buf.length > MAX_INPUT_BYTES) throw apiError(413, "validation", "admin.appearance.tooLarge");
   if (!sniffImage(buf)) throw apiError(415, "validation", "admin.appearance.badType");
   const base = sharp(buf, { failOn: "error", limitInputPixels: 60_000_000 }).rotate(); // rotate(): EXIF 방향 적용, 출력에 메타데이터는 기본 미포함
@@ -80,8 +90,7 @@ export async function processUpload(actor: Actor, buf: Buffer, theme: Theme, lab
   const batch = db().batch();
   batch.set(ref, {
     id: ref.id,
-    source: "upload",
-    label: label.slice(0, 60) || "upload",
+    ...extra,
     theme,
     state: "draft",
     width: Math.min(2560, width),
@@ -90,10 +99,143 @@ export async function processUpload(actor: Actor, buf: Buffer, theme: Theme, lab
     createdBy: actor.uid,
     createdAt: FieldValue.serverTimestamp(),
   });
-  batch.set(db().collection("auditLogs").doc(), { actorUid: actor.uid, actorRole: actor.roles.join(","), workspaceId: null, action: "appearance.upload", targetId: ref.id, reason: label.slice(0, 60), at: FieldValue.serverTimestamp() });
+  batch.set(db().collection("auditLogs").doc(), { actorUid: actor.uid, actorRole: actor.roles.join(","), workspaceId: null, action: extra.source === "ai" ? "appearance.generated" : "appearance.upload", targetId: ref.id, reason: extra.label, at: FieldValue.serverTimestamp() });
   await batch.commit();
   return { id: ref.id };
 }
+
+// ---------------------------------------------------------------------------
+// AI 배경 생성 job (docs/07): 동시에 1 job, 확정 실패(429/5xx)만 1 회 재시도, 결과 불명(timeout)은 재시도·재생성하지 않는다.
+// 이미지 비용은 대화 비용과 별도(imageUsageMonthly)로 예약→정산한다.
+
+const GEN_RESERVE_MICROS = 50_000; // $0.05 — low 실측 ≈ $0.005 의 10 배. 결과 불명이면 이 값을 비용으로 잡는다.
+const GEN_STALE_MS = 5 * 60_000; // 함수가 중간에 죽어 lock 이 남은 경우 이 시간 뒤 불명 실패로 정리
+const GEN_TIMEOUT_MS = 90_000;
+const ACTIVE_STATUSES: GenJobStatus[] = ["queued", "generating", "processing"];
+
+export function imageBudgetMicros() {
+  const usd = Number(process.env.IMAGE_MONTHLY_BUDGET_USD ?? "5");
+  return Math.round((Number.isFinite(usd) && usd >= 0 ? usd : 5) * 1_000_000);
+}
+const thisMonth = () => new Date().toISOString().slice(0, 7);
+const genLockRef = () => db().collection("appearanceGenLocks").doc(SITE());
+const usageRef = (month: string) => db().collection("imageUsageMonthly").doc(`${SITE()}_${month}`);
+const jobRef = (id: string) => db().collection("backgroundJobs").doc(id);
+
+
+
+function jobView(id: string, x: Record<string, unknown>): GenJobView {
+  return {
+    id,
+    status: x.status as GenJobStatus,
+    error: (x.error as string | null | undefined) ?? null,
+    assetId: (x.assetId as string | null | undefined) ?? null,
+    costMicros: (x.costMicros as number | undefined) ?? 0,
+    label: (x.label as string | undefined) ?? "",
+    theme: x.theme as Theme,
+    createdAt: (x.createdAt as Timestamp | undefined)?.toDate().toISOString() ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * 생성 요청. requestId(클라이언트 Idempotency-Key) 가 job ID 라서 같은 요청을 다시 보내도 job 은 하나다.
+ * Image API 가 동기 응답이라 반환 시점에 job 은 ready 또는 failed.
+ */
+export async function generateBackground(actor: Actor, requestId: string, opts: GenOptions): Promise<GenJobView> {
+  if (!isImageGenConfigured()) throw apiError(503, "not_configured", "errors.not_configured");
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(requestId)) throw apiError(400, "validation", "errors.validation");
+  const ref = jobRef(requestId);
+  const prompt = buildBackgroundPrompt(opts);
+  const label = `AI · ${opts.scene} · ${opts.palette}`;
+  const month = thisMonth();
+
+  const existing = await db().runTransaction(async (tx) => {
+    const [job, lock, usage] = await Promise.all([tx.get(ref), tx.get(genLockRef()), tx.get(usageRef(month))]);
+    if (job.exists) return jobView(job.id, job.data()!);
+    const activeId = lock.data()?.activeJobId as string | undefined;
+    if (activeId) {
+      const active = await tx.get(jobRef(activeId));
+      const a = active.data();
+      const since = (a?.startedAt as Timestamp | undefined)?.toMillis() ?? 0;
+      if (a && ACTIVE_STATUSES.includes(a.status) && Date.now() - since < GEN_STALE_MS) throw apiError(409, "invalid_state", "admin.appearance.genBusy");
+      if (a && ACTIVE_STATUSES.includes(a.status)) {
+        // 함수가 중간에 종료된 job: 생성·과금 여부 불명 → 예약액을 비용으로 확정하고 다시 만들지 않는다
+        const reserved = (a.reservedMicros as number | undefined) ?? GEN_RESERVE_MICROS;
+        tx.update(active.ref, { status: "failed", error: "unknown", costMicros: reserved, finishedAt: FieldValue.serverTimestamp() });
+        tx.set(usageRef((a.month as string | undefined) ?? month), { reservedMicros: FieldValue.increment(-reserved), costMicros: FieldValue.increment(reserved), unknown: FieldValue.increment(1) }, { merge: true });
+      }
+    }
+    const u = usage.data() ?? {};
+    if (((u.costMicros as number | undefined) ?? 0) + ((u.reservedMicros as number | undefined) ?? 0) + GEN_RESERVE_MICROS > imageBudgetMicros()) throw apiError(429, "limit", "admin.appearance.genBudget");
+    tx.create(ref, { site: SITE(), status: "generating", theme: opts.theme, options: opts, prompt, label, model: IMAGE_MODEL.id, quality: IMAGE_MODEL.quality, size: IMAGE_MODEL.size, month, reservedMicros: GEN_RESERVE_MICROS, attempts: 0, createdBy: actor.uid, createdAt: FieldValue.serverTimestamp(), startedAt: Timestamp.now() });
+    tx.set(genLockRef(), { activeJobId: requestId, at: FieldValue.serverTimestamp() });
+    tx.set(usageRef(month), { site: SITE(), month, reservedMicros: FieldValue.increment(GEN_RESERVE_MICROS) }, { merge: true });
+    tx.set(db().collection("auditLogs").doc(), { actorUid: actor.uid, actorRole: actor.roles.join(","), workspaceId: null, action: "appearance.generate", targetId: requestId, reason: `${opts.theme} ${opts.scene}/${opts.palette}/${opts.season}${opts.custom.trim() ? " +custom" : ""}`, at: FieldValue.serverTimestamp() });
+    return null;
+  });
+  if (existing) return existing;
+
+  /** 종료 처리: job 상태 + 예약 정산 + lock 해제를 한 transaction 으로 */
+  const finish = async (patch: Record<string, unknown>, chargedMicros: number, counted: boolean) => {
+    await db().runTransaction(async (tx) => {
+      const lock = await tx.get(genLockRef());
+      tx.update(ref, { ...patch, costMicros: chargedMicros, finishedAt: FieldValue.serverTimestamp() });
+      tx.set(
+        usageRef(month),
+        {
+          reservedMicros: FieldValue.increment(-GEN_RESERVE_MICROS),
+          costMicros: FieldValue.increment(chargedMicros),
+          ...(counted ? { count: FieldValue.increment(1) } : {}),
+          ...(patch.error === "unknown" ? { unknown: FieldValue.increment(1) } : {}),
+        },
+        { merge: true },
+      );
+      if (lock.data()?.activeJobId === requestId) tx.delete(genLockRef());
+    });
+    return jobView(requestId, (await ref.get()).data() ?? {});
+  };
+
+  let result: Awaited<ReturnType<typeof generateImage>> | null = null;
+  for (let attempt = 1; attempt <= 2 && !result; attempt++) {
+    try {
+      await ref.update({ attempts: attempt });
+      result = await generateImage({ prompt, requestId: `${requestId}-${attempt}`, timeoutMs: GEN_TIMEOUT_MS });
+    } catch (e) {
+      const err = e instanceof ImageGenError ? e : new ImageGenError("server", null, String(e).slice(0, 200));
+      if (err.unknown) return finish({ status: "failed", error: "unknown", errorDetail: err.message }, GEN_RESERVE_MICROS, false);
+      if (!err.retryable || attempt === 2) return finish({ status: "failed", error: err.kind, errorDetail: err.message }, 0, false);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  const r = result!;
+  const cost = imageCostMicros(r.inputTokens, r.outputTokens);
+  await ref.update({ status: "processing", providerRequestId: r.providerRequestId, inputTokens: r.inputTokens, outputTokens: r.outputTokens });
+  try {
+    const asset = await storeAsset(actor, r.data, opts.theme, { source: "ai", label, jobId: requestId, prompt, model: IMAGE_MODEL.id, costMicros: cost });
+    return await finish({ status: "ready", assetId: asset.id, error: null }, cost, true);
+  } catch (e) {
+    // 생성은 됐고 비용도 발생 — 비용은 정산하되 재생성하지 않는다
+    return finish({ status: "failed", error: "processing", errorDetail: String((e as { messageKey?: string }).messageKey ?? e).slice(0, 200) }, cost, true);
+  }
+}
+
+export async function generationStatus(): Promise<GenerationInfo> {
+  const [jobs, usage] = await Promise.all([db().collection("backgroundJobs").where("site", "==", SITE()).limit(100).get(), usageRef(thisMonth()).get()]);
+  const u = usage.data() ?? {};
+  return {
+    configured: isImageGenConfigured(),
+    model: IMAGE_MODEL.id,
+    quality: IMAGE_MODEL.quality,
+    budgetMicros: imageBudgetMicros(),
+    monthCostMicros: (u.costMicros as number | undefined) ?? 0,
+    monthCount: (u.count as number | undefined) ?? 0,
+    jobs: jobs.docs
+      .map((d) => jobView(d.id, d.data()))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 6),
+  };
+}
+
 
 export async function listAppearance() {
   const [assetDocs, versions, site] = await Promise.all([

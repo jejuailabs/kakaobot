@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { DemoAdminData, DemoAsset, MemberStatus } from "@/lib/shared/demo-admin";
+import type { GenerationInfo, GenJobView, GenOptions } from "@/lib/shared/appearance-gen";
 import type { UsageDay } from "@/lib/shared/domain";
 
 // 운영자 화면 데이터 계층. demo 는 이 탭 메모리에서만 바뀐다. live 는 S6/S7 에서 /api/v1/admin/* 로 연결한다.
@@ -37,7 +38,7 @@ export type AdminMetrics = {
 export type AdminCtx = {
   mode: "demo" | "live";
   role: AdminRole;
-  data: DemoAdminData & { usage?: UsageDay[]; metrics?: AdminMetrics; appearanceVersion?: number };
+  data: DemoAdminData & { usage?: UsageDay[]; metrics?: AdminMetrics; appearanceVersion?: number; imageGen?: GenerationInfo };
   revealed: Set<string>;
   /** live: 서버에서 받은 원문 (열람한 건만) */
   revealedText?: Record<string, { input: string; output: string }>;
@@ -46,6 +47,8 @@ export type AdminCtx = {
     /** live: 서버 업로드 (성공 시 null, 실패 시 오류 메시지 key) */
     uploadFile?(file: Blob, theme: "light" | "dark", label: string): Promise<string | null>;
     deleteAsset?(assetId: string): Promise<boolean>;
+    /** live: AI 배경 생성 (성공 시 job, 실패 시 오류 메시지 key) */
+    generateBackground?(requestId: string, options: GenOptions): Promise<{ job: GenJobView } | { error: string }>;
   };
 };
 

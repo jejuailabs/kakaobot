@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, ImagePlus, Monitor, Moon, RotateCcw, Smartphone, Sparkles, Sun, Trash2, Upload } from "lucide-react";
+import { Eye, Monitor, Moon, RotateCcw, Smartphone, Sun, Trash2, Upload } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
 import { DemoBadge, ErrorBanner, GlassCard, StatusPill } from "@/components/glass/glass-card";
@@ -14,6 +14,7 @@ import { HeroConsole } from "@/features/landing/hero-console";
 import { cn } from "@/lib/shared/cn";
 import type { DemoAsset } from "@/lib/shared/demo-admin";
 import { useAdmin, type AppearanceSettings } from "./admin-context";
+import { AiBackgroundCard } from "./ai-background-card";
 import { ReasonDialog } from "./reason-dialog";
 
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -82,7 +83,6 @@ export function AppearanceView() {
   const [rollbackId, setRollbackId] = React.useState<string | null>(null);
   const [autoGen, setAutoGen] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
-  const aiConfigured = false; // IMAGE_PROVIDER_API_KEY 미설정 (S7 서버 adapter)
 
   const list = data.assets.filter((a) => a.theme === theme);
   const groups: { key: DemoAsset["state"]; items: DemoAsset[] }[] = [
@@ -274,32 +274,16 @@ export function AppearanceView() {
             <p className="text-caption text-muted">{t("admin.appearance.panelNote")}</p>
           </GlassCard>
 
-          <GlassCard className="flex flex-col gap-3 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="flex items-center gap-2 font-semibold">
-                <Sparkles className="size-4 text-accent" aria-hidden />
-                {t("admin.appearance.aiTitle")}
-              </p>
-              <StatusPill tone="neutral">{t("common.notConfigured")}</StatusPill>
-            </div>
-            <p className="text-caption text-muted">{t("admin.appearance.aiUnconfigured")}</p>
-            <div className="flex flex-wrap gap-1.5" aria-disabled>
-              {["mountain", "lake", "sea", "forest", "abstract"].map((k) => (
-                <span key={k} className="rounded-full border border-glass-border px-2.5 py-1 text-caption text-muted opacity-60">{t(`admin.appearance.scenes.${k}`)}</span>
-              ))}
-            </div>
-            <Button variant="secondary" disabled={!aiConfigured}>
-              <ImagePlus aria-hidden />
-              {t("admin.appearance.generate")}
-            </Button>
-          </GlassCard>
+          <AiBackgroundCard theme={theme} onCreated={setSelectedId} />
 
           <GlassCard className="flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between gap-2">
               <label htmlFor="ap-auto" className="font-semibold">{t("admin.appearance.autoTitle")}</label>
-              <Switch id="ap-auto" checked={autoGen} onCheckedChange={setAutoGen} disabled={!aiConfigured} />
+              {/* 자동 일정(서버 cron)은 아직 구현 전 — 켜도 동작하지 않는 설정을 노출하지 않는다 */}
+              <Switch id="ap-auto" checked={autoGen} onCheckedChange={setAutoGen} disabled />
             </div>
-            <fieldset disabled={!aiConfigured || !autoGen} className="grid grid-cols-2 gap-3 disabled:opacity-60">
+            <p className="text-caption text-muted">{t("admin.appearance.autoPending")}</p>
+            <fieldset disabled className="grid grid-cols-2 gap-3 disabled:opacity-60">
               <Field id="ap-cycle" label={t("admin.appearance.cycle")}>
                 {(p) => (
                   <GlassSelect {...p} defaultValue="weekly">

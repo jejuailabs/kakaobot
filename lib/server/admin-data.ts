@@ -4,7 +4,8 @@ import type { DemoAdminData, DemoAudit, DemoConversation, DemoGateway, DemoJob, 
 import type { UsageDay } from "@/lib/shared/domain";
 import { maskText } from "@/lib/shared/masking";
 import { apiError } from "./api";
-import { listAppearance } from "./appearance";
+import type { GenerationInfo } from "@/lib/shared/appearance-gen";
+import { generationStatus, listAppearance } from "./appearance";
 import { adminAuth, adminDb } from "./firebase-admin";
 
 // 운영자 화면 데이터 (docs/07). 원문 대화는 여기서 항상 마스킹해서 내려보내고,
@@ -27,7 +28,7 @@ export type AdminMetrics = {
   errors: { key: string; value: number }[];
 };
 
-export type LiveAdminData = DemoAdminData & { usage: UsageDay[]; metrics: AdminMetrics; appearanceVersion: number };
+export type LiveAdminData = DemoAdminData & { usage: UsageDay[]; metrics: AdminMetrics; appearanceVersion: number; imageGen: GenerationInfo };
 
 export async function loadAdminData(): Promise<LiveAdminData> {
   const now = Date.now();
@@ -44,7 +45,7 @@ export async function loadAdminData(): Promise<LiveAdminData> {
     db().collection("deliveries").where("state", "in", ["unknown", "failed"]).limit(100).get(),
     db().collection("gateways").limit(10).get(),
   ]);
-  const appearance = await listAppearance();
+  const [appearance, imageGen] = await Promise.all([listAppearance(), generationStatus()]);
 
   const wsById = new Map(workspaces.docs.map((d) => [d.id, d.data()]));
   const userByWs = new Map(users.docs.map((d) => [d.data().workspaceId as string, d.data()]));
@@ -164,6 +165,7 @@ export async function loadAdminData(): Promise<LiveAdminData> {
     gateways: gatewayRows,
     assets: appearance.assets.map((a) => ({ id: a.id, source: a.source, label: a.label, theme: a.theme, state: a.state, url: `/api/v1/appearance/files/${a.id}/desktop`, createdAt: a.createdAt, sizeKb: a.sizeKb, width: a.width })),
     appearanceVersion: appearance.site.version,
+    imageGen,
     joinQueue: [],
     signups,
     updatedAt: new Date(now).toISOString(),

@@ -713,7 +713,45 @@
       "applied": "Background applied",
       "demoApplyNote": "In the demo only this list changes; the real site background stays the same.",
       "deleted": "Background deleted",
-      "tooComplex": "This image is too detailed to meet the size limit. Try another image."
+      "tooComplex": "This image is too detailed to meet the size limit. Try another image.",
+      "aiReady": "Available",
+      "aiNote": "Creates a low-quality {theme} background and adds it as a draft. Customers see no change until you apply it.",
+      "scene": "Scene",
+      "palette": "Palette",
+      "palettes": {
+        "teal": "Teal",
+        "lavender": "Lavender",
+        "sunset": "Sunset"
+      },
+      "season": "Season",
+      "seasons": {
+        "any": "Any",
+        "spring": "Spring",
+        "summer": "Summer",
+        "autumn": "Autumn",
+        "winter": "Winter"
+      },
+      "customPrompt": "Extra direction (optional)",
+      "customPlaceholder": "e.g. misty early morning",
+      "generating": "Generating… (10–30s)",
+      "genReady": "AI background added as a draft",
+      "genUsage": "{count} this month · {cost} / budget {budget}",
+      "genStatus": {
+        "queued": "Queued",
+        "generating": "Generating",
+        "processing": "Processing",
+        "ready": "Done",
+        "failed": "Failed"
+      },
+      "genError": {
+        "unknown": "No response was received, so the result is unknown. It won't be retried automatically to avoid double charges.",
+        "moderation": "The request was blocked by the image policy. Change the extra direction.",
+        "processing": "The generated image couldn't be converted to background specs. Try again.",
+        "other": "Generation failed. Try again in a moment."
+      },
+      "genBusy": "A generation is already running. Try again when it finishes.",
+      "genBudget": "This month's background generation budget has been reached.",
+      "autoPending": "Scheduled generation isn't available yet. Generate manually and apply it yourself for now."
     },
     "liveNotReadyTitle": "Operator data not connected yet",
     "liveNotReadyDesc": "Your permission is confirmed. Real member, conversation and background data will be connected in the next stages (S6, S7). You can preview the screens in the demo."
