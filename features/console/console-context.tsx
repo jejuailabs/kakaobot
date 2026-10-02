@@ -36,6 +36,8 @@ export type ConsoleActions = {
   saveDraft(draft: Omit<WizardDraft, "updatedAt">): Promise<Result<WizardDraft>>;
   loadDraft(id: string): Promise<Result<WizardDraft>>;
   discardDraft(id: string): Promise<void>;
+  /** live: 서버 상태 다시 읽기 (연결 대기 poll) */
+  refresh?(): Promise<void>;
   /** demo 전용: 운영자 입장 확인 / 방에서 코드 전송을 흉내낸다. live 에서는 undefined. */
   simulate?: {
     operatorJoined(botId: string): void;

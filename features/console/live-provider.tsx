@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { csrfToken } from "@/lib/client/firebase";
-import type { Bot, ConsoleSnapshot } from "@/lib/shared/domain";
+import type { Bot, ConsoleSnapshot, JoinRequest, PairingCode, Room } from "@/lib/shared/domain";
 import { ConsoleProvider, consoleHref, type ActionError, type ConsoleActions, type Result, type WizardDraft } from "./console-context";
 
 // 실제 콘솔 데이터 계층: /api/v1/* 를 호출하고, 변경 후 서버 snapshot 을 다시 읽는다(router.refresh).
-// 연결(S4)·AI 답변(S5) 은 아직 API 가 없으므로 "아직 설정되지 않은 기능"으로 정직하게 응답한다.
+// AI 테스트 답변(S5) 은 아직 API 가 없으므로 "아직 설정되지 않은 기능"으로 정직하게 응답한다.
 
 const KNOWN: ActionError[] = ["conflict", "limit", "validation", "not_found", "not_configured", "network", "invalid_state"];
 
@@ -33,6 +33,8 @@ const notYet = async <T,>(): Promise<Result<T>> => ({ ok: false, error: "not_con
 
 export function LiveConsoleProvider({ initial, canAdmin, children }: { initial: ConsoleSnapshot; canAdmin: boolean; children: React.ReactNode }) {
   const router = useRouter();
+  // 발급한 연결 코드 원문은 이 탭 메모리에만 둔다. 새로고침하면 다시 발급한다.
+  const [codes, setCodes] = React.useState<PairingCode[]>([]);
 
   const actions = React.useMemo<ConsoleActions>(() => {
     const refreshAfter = <T,>(r: Result<T>) => {
@@ -66,16 +68,38 @@ export function LiveConsoleProvider({ initial, canAdmin, children }: { initial: 
       async discardDraft(id) {
         await call("DELETE", `/api/v1/drafts/${encodeURIComponent(id)}`);
       },
-      requestJoin: notYet,
-      issuePairingCode: notYet,
+      async requestJoin(botId, input) {
+        const r = await call<{ joinRequest: JoinRequest }>("POST", `/api/v1/bots/${encodeURIComponent(botId)}/join-request`, input);
+        return refreshAfter(r.ok ? { ok: true, data: r.data.joinRequest } : r);
+      },
+      async issuePairingCode(botId) {
+        const r = await call<{ pairingCode: PairingCode }>("POST", `/api/v1/bots/${encodeURIComponent(botId)}/pairing-token`);
+        if (!r.ok) return r;
+        setCodes((c) => [...c.filter((x) => x.botId !== botId), r.data.pairingCode]);
+        return { ok: true, data: r.data.pairingCode };
+      },
+      async setRetention(roomId, days) {
+        const r = await call<{ room: Room }>("PATCH", `/api/v1/rooms/${encodeURIComponent(roomId)}`, { retentionDays: days });
+        return refreshAfter(r.ok ? { ok: true, data: r.data.room } : r);
+      },
+      // 연결 상태 확인(poll): 서버 snapshot 을 다시 읽는다
+      async refresh() {
+        router.refresh();
+      },
       testReply: notYet,
-      setRetention: notYet,
     };
   }, [router]);
 
   const value = React.useMemo(
-    () => ({ mode: "live" as const, snapshot: initial, actions, canAdmin, href: (p: string) => consoleHref("live", p) }),
-    [initial, actions, canAdmin],
+    () => ({
+      mode: "live" as const,
+      // 연결된 bot 의 코드는 더 이상 보여주지 않는다
+      snapshot: { ...initial, pairingCodes: codes.filter((c) => initial.bots.some((b) => b.id === c.botId && b.state === "awaiting_code")) },
+      actions,
+      canAdmin,
+      href: (p: string) => consoleHref("live", p),
+    }),
+    [initial, codes, actions, canAdmin],
   );
   return <ConsoleProvider value={value}>{children}</ConsoleProvider>;
 }

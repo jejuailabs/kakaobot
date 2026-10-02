@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { MembersView } from "@/features/admin/members-view";
+import { AdminNotReady } from "@/features/admin/live/not-ready";
 
 export async function generateMetadata({ params }: PageProps<"/[locale]/admin/members">): Promise<Metadata> {
   const { locale } = await params;
@@ -9,5 +9,5 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/admin/me
 }
 
 export default function Page() {
-  return <MembersView />;
+  return <AdminNotReady />;
 }

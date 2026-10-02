@@ -173,8 +173,8 @@ export function ConnectionPanel({ bot }: { bot: Bot }) {
   const [issuing, setIssuing] = React.useState(false);
   const [issueError, setIssueError] = React.useState<string | null>(null);
   const waiting = bot.state === "awaiting_join" || bot.state === "awaiting_code";
-  // live 에서는 GET /api/v1/bots/:id/connection 을 poll 한다 (S4). demo 는 로컬 상태라 no-op.
-  const poll = usePolling(waiting && mode === "live", () => {});
+  // live: 5초마다 서버 상태를 다시 읽는다(탭 비활성 시 중지, 5분 후 수동). demo 는 로컬 상태라 poll 불필요.
+  const poll = usePolling(waiting && mode === "live", () => void actions.refresh?.());
 
   const steps = [
     { key: "request", label: t("connection.steps.request") },

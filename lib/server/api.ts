@@ -1,5 +1,6 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
+import { can, type Permission } from "@/lib/shared/rbac";
 import { errorBody, hasValidCsrf, isSameOrigin, requestId } from "./request-guard";
 import { getSessionUser, type SessionUser } from "./session";
 
@@ -56,4 +57,12 @@ export async function readJson(req: NextRequest, maxBytes = 64_000): Promise<unk
   } catch {
     throw apiError(400, "validation", "errors.validation");
   }
+}
+
+/** 운영자 API: 서버 claim(roles) 기반 permission 확인. 권한 없으면 404 로 존재를 숨긴다. */
+export function adminRoute<C = Record<string, string>>(permission: Permission, handler: Handler<C>, opts: { mutation?: boolean } = {}) {
+  return userRoute<C>(async (ctx) => {
+    if (!can(ctx.user.roles, permission)) throw apiError(404, "not_found");
+    return handler(ctx);
+  }, opts);
 }
