@@ -201,7 +201,7 @@ export function ResponseFields({ values, onChange, errors }: FormProps) {
             <option value="">{t("wizard.response.modelPlaceholder")}</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.label}
+                {m.id === "default" ? t("wizard.response.defaultModel") : m.label}
               </option>
             ))}
           </GlassSelect>

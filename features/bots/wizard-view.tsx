@@ -200,7 +200,7 @@ export function WizardView() {
                 [t("wizard.basic.name"), values.name],
                 [t("bot.roles"), values.roles.map((r) => t(`roles.${r}.title`)).join(", ")],
                 [t("wizard.response.trigger"), values.trigger],
-                [t("wizard.response.model"), model?.label ?? "—"],
+                [t("wizard.response.model"), model ? (model.id === "default" ? t("wizard.response.defaultModel") : model.label) : "—"],
                 [t("bot.tone"), `${t(`tone.${values.tone}`)} · ${t(`length.${values.length}`)}`],
                 [t("wizard.response.dailyLimit"), t("wizard.review.perDay", { count: values.dailyLimit })],
               ].map(([k, v]) => (

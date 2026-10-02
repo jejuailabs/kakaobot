@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/shared/cn";
 
 const control =
-  "w-full rounded-[12px] border border-glass-border bg-input px-3.5 text-[14px] text-fg placeholder:text-muted/80 outline-none transition-shadow focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger";
+  "w-full rounded-[12px] border border-input-border bg-input px-3.5 hover:border-primary text-[14px] text-fg placeholder:text-muted/80 outline-none transition-shadow focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger";
 
 export function GlassInput({ className, ...props }: React.ComponentProps<"input">) {
   return <input className={cn(control, "h-11", className)} {...props} />;

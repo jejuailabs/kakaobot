@@ -348,7 +348,8 @@
       "replyLocale": "Reply language",
       "dailyLimit": "Daily limit",
       "dailyLimitHint": "Maximum replies per day. Resets at midnight.",
-      "noAutoReply": "The bot never replies to every message — only to messages starting with the trigger."
+      "noAutoReply": "The bot never replies to every message — only to messages starting with the trigger.",
+      "defaultModel": "Default model (applied once an AI provider is connected)"
     },
     "review": {
       "perDay": "{count} per day",
@@ -531,7 +532,9 @@
     "pageNotFound": "Page not found",
     "pageNotFoundDesc": "The address changed or the page doesn't exist.",
     "goHome": "Go home",
-    "forbidden": "You don't have permission."
+    "forbidden": "You don't have permission.",
+    "unauthenticated": "Please sign in again.",
+    "internal": "Something went wrong. Please try again shortly."
   },
   "admin": {
     "reason": "Reason",
