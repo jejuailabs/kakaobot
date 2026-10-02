@@ -602,7 +602,10 @@
       "revealDesc": "Viewing raw text requires permission and a reason, and is audited.",
       "noOutput": "No reply",
       "noReasoning": "Model internal reasoning is never collected.",
-      "policy": "Kept 30 days by default · regular room chat not collected · CSV export needs separate permission."
+      "policy": "Kept 30 days by default · regular room chat not collected · CSV export needs separate permission.",
+      "export": "Export CSV",
+      "exportDesc": "Downloads the last 7 days, masked. Requires a separate permission and is audited.",
+      "exported": "CSV downloaded"
     },
     "audit": {
       "subtitle": "Record of operator actions. It can't be edited or deleted.",

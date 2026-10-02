@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { DemoAdminData, DemoAsset, MemberStatus } from "@/lib/shared/demo-admin";
+import type { UsageDay } from "@/lib/shared/domain";
 
 // 운영자 화면 데이터 계층. demo 는 이 탭 메모리에서만 바뀐다. live 는 S6/S7 에서 /api/v1/admin/* 로 연결한다.
 
@@ -20,15 +21,34 @@ export type AdminActions = {
 
 export type AppearanceSettings = { overlay: number; blur: number; brightness: number; scope: "all" | "dashboard" | "landing" };
 
-type Ctx = {
-  mode: "demo" | "live";
-  role: AdminRole;
-  data: DemoAdminData;
-  revealed: Set<string>;
-  actions: AdminActions;
+export type AdminMetrics = {
+  members: number;
+  newMembers30d: number;
+  dau: number;
+  mau: number;
+  activeBots: number;
+  rooms: number;
+  p95LatencyMs: number | null;
+  monthCostMicros: number;
+  modelShare: { label: string; value: number }[];
+  errors: { key: string; value: number }[];
 };
 
-const AdminContext = React.createContext<Ctx | null>(null);
+export type AdminCtx = {
+  mode: "demo" | "live";
+  role: AdminRole;
+  data: DemoAdminData & { usage?: UsageDay[]; metrics?: AdminMetrics };
+  revealed: Set<string>;
+  /** live: 서버에서 받은 원문 (열람한 건만) */
+  revealedText?: Record<string, { input: string; output: string }>;
+  actions: AdminActions & { exportCsv?(days: number, reason: string): Promise<boolean> };
+};
+
+const AdminContext = React.createContext<AdminCtx | null>(null);
+
+export function AdminProvider({ value, children }: { value: AdminCtx; children: React.ReactNode }) {
+  return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;
+}
 
 export function useAdmin() {
   const c = React.useContext(AdminContext);

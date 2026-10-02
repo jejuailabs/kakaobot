@@ -34,27 +34,32 @@ export function AdminOverview() {
   const [range, setRange] = React.useState(30);
   const now = useNow();
 
-  // demo: 플랫폼 합계를 표현하기 위해 고객 demo 사용량을 확대한 예시값
-  const platformUsage = snapshot.usage.map((d) => ({ ...d, requests: d.requests * 6, succeeded: d.succeeded * 6, failed: d.failed * 6 }));
+  const m = data.metrics;
+  // live: 플랫폼 실제 집계 / demo: 고객 demo 사용량을 확대한 예시값
+  const platformUsage = data.usage ?? snapshot.usage.map((d) => ({ ...d, requests: d.requests * 6, succeeded: d.succeeded * 6, failed: d.failed * 6 }));
   const { current, previous } = lastNDays(platformUsage, range);
   const cur = totals(current);
   const prev = totals(previous);
   const members = data.members.length;
-  const newMembers = data.members.filter((m) => now.getTime() - new Date(m.joinedAt).getTime() < range * 86_400_000).length;
-  const cost = data.members.reduce((a, m) => a + m.monthCostMicros, 0) / 1_000_000;
+  const newMembers = data.members.filter((x) => now.getTime() - new Date(x.joinedAt).getTime() < range * 86_400_000).length;
+  const cost = (m ? m.monthCostMicros : data.members.reduce((a, x) => a + x.monthCostMicros, 0)) / 1_000_000;
   const delta = (c: number, p: number) => (p > 0 ? { text: `${c >= p ? "+" : ""}${format.number((c - p) / p, { style: "percent", maximumFractionDigits: 1 })}`, positive: c >= p } : null);
 
-  const providers = [
-    { label: "Standard (demo)", value: 0.74 },
-    { label: "Fast (demo)", value: 0.26 },
-  ];
-  const errors = [
-    { key: "provider_429", value: 41 },
-    { key: "provider_timeout", value: 18 },
-    { key: "delivery_unknown", value: 6 },
-    { key: "budget_exceeded", value: 12 },
-  ];
-  const maxErr = Math.max(...errors.map((e) => e.value));
+  const providers = m
+    ? m.modelShare
+    : [
+        { label: "Standard (demo)", value: 0.74 },
+        { label: "Fast (demo)", value: 0.26 },
+      ];
+  const errors = m
+    ? m.errors
+    : [
+        { key: "provider_429", value: 41 },
+        { key: "provider_timeout", value: 18 },
+        { key: "delivery_unknown", value: 6 },
+        { key: "budget_exceeded", value: 12 },
+      ];
+  const maxErr = Math.max(1, ...errors.map((e) => e.value));
   const maxSignup = Math.max(...data.signups.map((s) => s.value));
 
   return (
@@ -85,12 +90,12 @@ export function AdminOverview() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label={t("admin.overview.members")} value={format.number(members)} icon={<Users />} />
         <StatCard label={t("admin.overview.newMembers")} value={format.number(newMembers)} icon={<UserPlus />} hint={t("common.days", { count: range })} />
-        <StatCard label="DAU / MAU" value={`${format.number(7)} / ${format.number(members - 1)}`} icon={<Activity />} hint={t("admin.overview.dauDef")} />
-        <StatCard label={t("admin.overview.activeBots")} value={format.number(data.members.reduce((a, m) => a + (m.status === "active" ? m.bots : 0), 0))} icon={<Bot />} />
-        <StatCard label={t("admin.overview.rooms")} value={format.number(data.members.reduce((a, m) => a + m.rooms, 0))} icon={<MessagesSquare />} />
+        <StatCard label="DAU / MAU" value={m ? `${format.number(m.dau)} / ${format.number(m.mau)}` : `${format.number(7)} / ${format.number(members - 1)}`} icon={<Activity />} hint={t("admin.overview.dauDef")} />
+        <StatCard label={t("admin.overview.activeBots")} value={format.number(m ? m.activeBots : data.members.reduce((a, x) => a + (x.status === "active" ? x.bots : 0), 0))} icon={<Bot />} />
+        <StatCard label={t("admin.overview.rooms")} value={format.number(m ? m.rooms : data.members.reduce((a, x) => a + x.rooms, 0))} icon={<MessagesSquare />} />
         <StatCard label={t("admin.overview.requests")} value={format.number(cur.requests, { notation: "compact" })} icon={<Gauge />} delta={delta(cur.requests, prev.requests)} />
         <StatCard label={t("admin.overview.success")} value={cur.successRate == null ? "—" : format.number(cur.successRate, { style: "percent", maximumFractionDigits: 1 })} icon={<CheckCircle2 />} />
-        <StatCard label={t("admin.overview.p95")} value="2.8s" icon={<Timer />} />
+        <StatCard label={t("admin.overview.p95")} value={m ? (m.p95LatencyMs == null ? "—" : `${format.number(m.p95LatencyMs / 1000, { maximumFractionDigits: 1 })}s`) : "2.8s"} icon={<Timer />} />
         <StatCard label={t("admin.overview.cost")} value={format.number(cost, { style: "currency", currency: "USD" })} icon={<Coins />} hint={t("admin.overview.costHint")} />
       </div>
       <GlassCard>

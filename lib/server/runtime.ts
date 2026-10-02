@@ -38,8 +38,10 @@ type Reservation = { reservedMicros: number; refs: { day: FirebaseFirestore.Docu
  * 한도 확인 + 비용 reserve (transaction 안에서 호출).
  * 반환 null 이면 한도 초과.
  */
-async function reserve(tx: Transaction, p: { workspaceId: string; botId: string; roomKey: string | null; dailyLimit: number; reserveMicros: number }): Promise<Reservation | "limit" | "budget"> {
+async function reserve(tx: Transaction, p: { workspaceId: string; botId: string; roomKey: string | null; dailyLimit: number; reserveMicros: number }): Promise<Reservation | "limit" | "budget" | "suspended"> {
   const ws = await tx.get(db().collection("workspaces").doc(p.workspaceId));
+  // 정지된 회원: 신규 LLM 호출·송신 차단 (방 퇴장은 별도 운영 요청)
+  if (ws.data()?.status === "suspended") return "suspended";
   const limits = { ...DEFAULT_LIMITS, ...(ws.data()?.limits ?? {}) };
   const day = db().collection("usageDaily").doc(`${p.workspaceId}__${dayKey()}`);
   const month = db().collection("usageMonthly").doc(`${p.workspaceId}__${monthKey()}`);
@@ -162,12 +164,14 @@ export async function processJob(jobId: string): Promise<JobOutcome> {
   // 2) 한도·예산 reserve
   const reservation = await db().runTransaction(async (tx) => {
     const r = await reserve(tx, { workspaceId: claimed.workspaceId, botId: claimed.botId, roomKey: `${claimed.gatewayId}__${claimed.roomId}`, dailyLimit: bot.dailyLimit ?? 100, reserveMicros });
+    if (r === "suspended") tx.update(jobRef, { state: "ignored", errorCode: "workspace_suspended", finishedAt: FieldValue.serverTimestamp() });
     if (r === "limit" || r === "budget") {
       enqueueDelivery(tx, deliveryId, { ...deliveryBase, text: failureText(bot.replyLocale ?? "ko", "limit"), kind: "limit" });
       tx.update(jobRef, { state: "completed", errorCode: r, finishedAt: FieldValue.serverTimestamp() });
     }
     return r;
   });
+  if (reservation === "suspended") return "skipped";
   if (reservation === "limit" || reservation === "budget") return "limited";
 
   // 3) LLM
@@ -241,6 +245,7 @@ export async function testReply(workspaceId: string, botId: string | null, quest
   const messages = buildMessages([], q);
   const reserveMicros = costMicros(model, estimateTokens(system + q), MAX_OUTPUT_TOKENS);
   const reservation = await db().runTransaction((tx) => reserve(tx, { workspaceId, botId: usageBotId, roomKey: null, dailyLimit: bot.dailyLimit ?? 100, reserveMicros }));
+  if (reservation === "suspended") throw apiError(403, "account_suspended", "login.errorSuspended");
   if (reservation === "limit" || reservation === "budget") throw apiError(429, "limit", "errors.limit");
   try {
     const out = await callWithRetry(model, system, messages, `test_${crypto.randomUUID().slice(0, 12)}`);
@@ -262,8 +267,14 @@ export async function leaseOutbox(gatewayId: string) {
   const snap = await db().collection("deliveries").where("gatewayId", "==", gatewayId).where("state", "in", ["queued", "leased"]).limit(30).get();
   const now = Date.now();
   const leased: { id: string; roomId: string; text: string }[] = [];
+  // 정지된 회원 workspace 의 송신은 내보내지 않는다
+  const suspended = new Set<string>();
+  for (const wsId of new Set(snap.docs.map((d) => d.data().workspaceId as string))) {
+    if ((await db().collection("workspaces").doc(wsId).get()).data()?.status === "suspended") suspended.add(wsId);
+  }
   for (const d of snap.docs) {
     if (leased.length >= 10) break;
+    if (suspended.has(d.data().workspaceId)) continue;
     const ok = await db().runTransaction(async (tx) => {
       const cur = await tx.get(d.ref);
       const x = cur.data();

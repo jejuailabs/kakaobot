@@ -40,7 +40,10 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
       status: record?.status ?? "active",
       roles: claimRoles.filter((r): r is AdminRole => typeof r === "string" && (ADMIN_ROLES as readonly string[]).includes(r)),
     };
-  } catch {
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? "";
+    // 만료·폐기·위조 같은 인증 오류는 로그인 필요. 그 외(네트워크 등)는 원인을 남긴다.
+    if (!code.startsWith("auth/")) console.error("[session] verify failed (non-auth)", { code, message: (e as Error).message?.slice(0, 200) });
     return null;
   }
 });

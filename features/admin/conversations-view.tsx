@@ -1,12 +1,13 @@
 "use client";
 
-import { Eye, EyeOff, Lock } from "lucide-react";
+import { Download, Eye, EyeOff, Lock } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
 import * as React from "react";
 import { GlassCard, StatusPill, type PillTone } from "@/components/glass/glass-card";
 import { Button } from "@/components/ui/button";
 import { GlassInput, GlassSelect } from "@/components/ui/field";
 import { Modal } from "@/components/ui/primitives";
+import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/features/console/console-frame";
 import type { ConversationStatus, DemoConversation } from "@/lib/shared/demo-admin";
 import { maskedSummary, maskText } from "@/lib/shared/masking";
@@ -18,7 +19,9 @@ const tone: Record<ConversationStatus, PillTone> = { answered: "success", failed
 export function ConversationsView() {
   const t = useTranslations();
   const format = useFormatter();
-  const { data } = useAdmin();
+  const { data, actions } = useAdmin();
+  const toast = useToast();
+  const [exportOpen, setExportOpen] = React.useState(false);
   const [status, setStatus] = React.useState<"all" | ConversationStatus>("all");
   const [bot, setBot] = React.useState("all");
   const [q, setQ] = React.useState("");
@@ -32,7 +35,29 @@ export function ConversationsView() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title={t("nav.conversations")} description={t("admin.conversations.subtitle")} />
+      <PageHeader
+        title={t("nav.conversations")}
+        description={t("admin.conversations.subtitle")}
+        actions={
+          actions.exportCsv && (
+            <Button variant="secondary" size="sm" className="h-10" onClick={() => setExportOpen(true)}>
+              <Download aria-hidden />
+              {t("admin.conversations.export")}
+            </Button>
+          )
+        }
+      />
+      <ReasonDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        title={t("admin.conversations.export")}
+        description={t("admin.conversations.exportDesc")}
+        confirmLabel={t("admin.conversations.export")}
+        onConfirm={async (reason) => {
+          const ok = await actions.exportCsv?.(7, reason);
+          toast(ok ? t("admin.conversations.exported") : t("errors.forbidden"), ok ? "success" : "error");
+        }}
+      />
       <GlassCard className="flex flex-col gap-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
@@ -99,10 +124,12 @@ export function ConversationsView() {
 
 function ConversationDetail({ c, onClose }: { c: DemoConversation; onClose: () => void }) {
   const t = useTranslations();
-  const { revealed, actions } = useAdmin();
+  const { revealed, revealedText, actions, mode } = useAdmin();
   const [reveal, setReveal] = React.useState(false);
   const isRevealed = revealed.has(c.id);
-  const show = (s: string) => (isRevealed ? s : maskText(s));
+  // live 목록 데이터는 서버에서 이미 마스킹됨 → 원문은 열람 API 응답(revealedText)에서만 온다
+  const raw = mode === "live" ? revealedText?.[c.id] : { input: c.input, output: c.output };
+  const show = (field: "input" | "output") => (isRevealed && raw ? raw[field] : maskText(c[field]));
 
   return (
     <>
@@ -134,8 +161,8 @@ function ConversationDetail({ c, onClose }: { c: DemoConversation; onClose: () =
             )}
           </div>
           <div className="flex flex-col gap-2">
-            <p className="ml-auto max-w-[85%] rounded-[14px] rounded-tr-[4px] bg-kakao px-3 py-2 text-body text-kakao-fg">{show(c.input)}</p>
-            <p className="glass-solid max-w-[90%] rounded-[14px] rounded-tl-[4px] px-3 py-2 text-body">{c.output ? show(c.output) : t("admin.conversations.noOutput")}</p>
+            <p className="ml-auto max-w-[85%] rounded-[14px] rounded-tr-[4px] bg-kakao px-3 py-2 text-body text-kakao-fg">{show("input")}</p>
+            <p className="glass-solid max-w-[90%] rounded-[14px] rounded-tl-[4px] px-3 py-2 text-body">{c.output ? show("output") : t("admin.conversations.noOutput")}</p>
           </div>
           <p className="text-caption text-muted">{t("admin.conversations.noReasoning")}</p>
         </div>
