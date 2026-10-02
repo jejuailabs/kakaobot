@@ -41,6 +41,13 @@ const api = async (method, path, body, extra = {}) => {
   return [r.status, await r.json().catch(() => null)];
 };
 const room = `77${Date.now()}`;
+const mockRaw = (...args) =>
+  execFileSync(process.execPath, ["gateway/mock-gateway.ts", ...args], {
+    env: { ...process.env, WEB_API_BASE_URL: BASE },
+    stdio: ["ignore", "pipe", "ignore"],
+  })
+    .toString()
+    .trim();
 const mock = (text) =>
   execFileSync(process.execPath, ["gateway/mock-gateway.ts", "send", "--room", room, "--text", text], {
     env: { ...process.env, WEB_API_BASE_URL: BASE },
@@ -75,8 +82,30 @@ try {
   step("trigger message queued as one AI job", out.includes('"outcome":"queued"'), out);
   out = mock("그냥 잡담");
   step("normal chat ignored", out.includes("ignored_no_trigger"), out);
-  const deliveries = await db.collection("deliveries").where("workspaceId", "==", ws).get();
-  step("connect notice queued in outbox", deliveries.size === 1, deliveries.size);
+  // AI 답변: 응답 후(after) 처리되므로 outbox 를 잠시 poll 한다
+  let leased = [];
+  for (let i = 0; i < 20 && leased.filter((d) => d.text && !d.id.endsWith("__connect")).length === 0; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const out2 = mockRaw("outbox");
+    const json = JSON.parse(out2.slice(out2.indexOf("{")));
+    leased = leased.concat(json.deliveries ?? []);
+  }
+  const connectMsg = leased.find((d) => d.id.endsWith("__connect"));
+  const answer = leased.find((d) => d.id.endsWith("__reply"));
+  step("relay receives connect notice from outbox", Boolean(connectMsg), connectMsg?.text);
+  step("relay receives real AI answer from outbox", Boolean(answer && /[가-힣]/.test(answer.text)), answer?.text?.slice(0, 80));
+  if (answer) {
+    const ack = mockRaw("ack", "--id", answer.id, "--result", "sent");
+    step("relay acks delivery as sent", ack.includes('"ok":true'), ack);
+    const again = JSON.parse(mockRaw("outbox").replace(/^[^{]*/, ""));
+    step("sent delivery is not leased again", !(again.deliveries ?? []).some((d) => d.id === answer.id));
+  }
+  const logs = await db.collection("conversationLogs").where("workspaceId", "==", ws).get();
+  const log = logs.docs[0]?.data();
+  step("conversation log saved (input+answer, tokens, cost)", logs.size === 1 && log.status === "answered" && log.outputTokens > 0, `${log?.model} ${log?.latencyMs}ms ${log?.costMicros}µ$`);
+  const usage = await db.collection("usageDaily").where("workspaceId", "==", ws).get();
+  const u = usage.docs[0]?.data();
+  step("usage settled (reserve released)", u?.succeeded === 1 && (u?.reservedMicros ?? 0) === 0 && u?.costMicros > 0, JSON.stringify({ succeeded: u?.succeeded, reserved: u?.reservedMicros, cost: u?.costMicros }));
   const r = await fetch(`${BASE}/api/internal/gateways/gw-local/events`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-katcha-gateway": "gw-local", "x-katcha-timestamp": String(Date.now()), "x-katcha-nonce": "n1", "x-katcha-signature": "0".repeat(64) },
@@ -84,13 +113,17 @@ try {
   });
   step("forged gateway signature rejected", r.status === 401, r.status);
 } finally {
-  for (const c of ["bots", "promptVersions", "activities", "idempotencyKeys", "joinRequests", "pairingTokens", "roomBindings", "deliveries", "jobs", "auditLogs", "wizardDrafts"]) {
+  for (const c of ["bots", "promptVersions", "activities", "idempotencyKeys", "joinRequests", "pairingTokens", "roomBindings", "deliveries", "jobs", "auditLogs", "wizardDrafts", "conversationLogs", "usageDaily", "usageMonthly", "botUsageDaily"]) {
     const snap = await db.collection(c).where("workspaceId", "==", ws).get();
     await Promise.all(snap.docs.map((d) => d.ref.delete()));
   }
   const ev = await db.collection("events").where("roomId", "==", room).get();
   await Promise.all(ev.docs.map((d) => d.ref.delete()));
   await Promise.all([db.doc(`users/${uid}`).delete(), db.doc(`workspaces/${ws}`).delete(), db.doc(`pairingAttempts/gw-local__${room}`).delete()]);
+  for (const prefix of [`ws__${ws}__`, `room__gw-local__${room}__`]) {
+    const rc = await db.collection("rateCounters").where("__name__", ">=", prefix).where("__name__", "<", `${prefix}~`).get();
+    await Promise.all(rc.docs.map((d) => d.ref.delete()));
+  }
   await auth.deleteUser(uid).catch(() => {});
   console.log("cleanup done");
 }

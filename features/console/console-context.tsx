@@ -31,7 +31,7 @@ export type ConsoleActions = {
   deleteBot(id: string): Promise<Result<null>>;
   requestJoin(botId: string, input: JoinRequestInput): Promise<Result<JoinRequest>>;
   issuePairingCode(botId: string): Promise<Result<PairingCode>>;
-  testReply(botId: string | null, question: string, botName: string): Promise<Result<{ text: string; demo: boolean }>>;
+  testReply(botId: string | null, question: string, botName: string, draft?: BotInput): Promise<Result<{ text: string; demo: boolean }>>;
   setRetention(roomId: string, days: Room["retentionDays"]): Promise<Result<Room>>;
   saveDraft(draft: Omit<WizardDraft, "updatedAt">): Promise<Result<WizardDraft>>;
   loadDraft(id: string): Promise<Result<WizardDraft>>;

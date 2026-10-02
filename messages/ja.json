@@ -349,7 +349,8 @@
       "dailyLimit": "1日の上限",
       "dailyLimitHint": "1日の最大回答回数です。超えると翌日0時にリセットされます。",
       "noAutoReply": "すべてのメッセージに自動回答する機能はありません。呼び出し語で始まるメッセージにのみ回答します。",
-      "defaultModel": "既定のモデル(AI提供会社の連携後に適用)"
+      "defaultModel": "既定のモデル(AI提供会社の連携後に適用)",
+      "defaultModelNamed": "既定のモデル({name})"
     },
     "review": {
       "perDay": "1日{count}回",

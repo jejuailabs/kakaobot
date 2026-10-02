@@ -5,6 +5,7 @@ import { BOT_LIMITS } from "@/lib/shared/domain";
 import type { NormalizedEvent } from "@/lib/shared/gateway-contract";
 import { generatePairingCode, parseConnectCommand } from "@/lib/shared/pairing";
 import { fieldErrors, joinRequestSchema } from "@/lib/shared/schemas";
+import { connectedText } from "@/lib/shared/prompt";
 import { matchTrigger } from "@/lib/shared/trigger";
 import { apiError } from "./api";
 import { adminDb } from "./firebase-admin";
@@ -188,7 +189,7 @@ export type EventOutcome = "duplicate" | "ignored_self" | "ignored_unbound" | "i
  * 이벤트 저장 → 처리. 같은 eventId 는 한 번만 처리한다(at-least-once 전달 대비).
  * 미연결 방·일반 대화는 LLM 으로 보내지 않는다.
  */
-export async function ingestEvent(ev: NormalizedEvent): Promise<{ outcome: EventOutcome; reason?: string }> {
+export async function ingestEvent(ev: NormalizedEvent): Promise<{ outcome: EventOutcome; reason?: string; jobId?: string }> {
   const eventRef = db().collection("events").doc(encodeURIComponent(ev.eventId));
   try {
     await eventRef.create({ ...ev, state: "stored", storedAt: FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 7 * 86_400_000) });
@@ -234,7 +235,7 @@ export async function ingestEvent(ev: NormalizedEvent): Promise<{ outcome: Event
     { merge: false },
   );
   await db().collection("roomBindings").doc(binding.id).update({ lastMessageAt: FieldValue.serverTimestamp() });
-  return finish("queued");
+  return { ...(await finish("queued")), jobId: eventRef.id };
 }
 
 type ClaimResult = { ok: true; botId: string } | { ok: false; reason: string };
@@ -287,9 +288,8 @@ export async function claimRoom(ev: Pick<NormalizedEvent, "gatewayId" | "roomId"
       workspaceId: t.workspaceId,
       gatewayId: ev.gatewayId,
       roomId: ev.roomId,
-      text: "connected",
-      template: "connected",
-      trigger: bot.data()?.trigger ?? "!AI",
+      text: connectedText(bot.data()?.replyLocale ?? "ko", bot.data()?.trigger ?? "!AI"),
+      kind: "connected",
       state: "queued",
       attempt: 0,
       createdAt: FieldValue.serverTimestamp(),

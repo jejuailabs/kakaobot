@@ -3,6 +3,8 @@
 //
 // 사용 (Node 22.18+ type stripping):
 //   node gateway/mock-gateway.ts send --room 1234567890 --text "!연결 ABCD-EFGH"
+//   node gateway/mock-gateway.ts outbox
+//   node gateway/mock-gateway.ts ack --id <deliveryId> --result sent
 //   node gateway/mock-gateway.ts heartbeat
 // 환경: MOCK_GATEWAY_ID(기본 gw-local), WEB_API_BASE_URL(기본 http://localhost:3000), GATEWAY_KEYRING(.env.local)
 import "../scripts/env-local.mjs";
@@ -55,8 +57,14 @@ if (cmd === "send") {
     kind: "text",
   };
   await post("events", ev);
+} else if (cmd === "outbox") {
+  // relay 의 outbox poll 과 같은 호출: lease 된 송신 목록을 받는다
+  await post("outbox", {});
+} else if (cmd === "ack") {
+  // 송신 결과 보고. unknown 은 자동 재전송되지 않는다.
+  await post(`deliveries/${encodeURIComponent(opt("id"))}/ack`, { result: opt("result", "sent") });
 } else if (cmd === "heartbeat") {
   await post("heartbeat", { gatewayId, status: "ok", adapterVersion: "mock-0.1.0", observedAt: new Date().toISOString() });
 } else {
-  console.log('사용: node gateway/mock-gateway.ts send --room <id> --text "<msg>" [--message-id <id>] [--self] | heartbeat');
+  console.log('사용: node gateway/mock-gateway.ts send --room <id> --text "<msg>" [--message-id <id>] [--self] | outbox | ack --id <deliveryId> --result sent|failed|unknown | heartbeat');
 }

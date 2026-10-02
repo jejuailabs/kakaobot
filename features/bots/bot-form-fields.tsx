@@ -201,7 +201,7 @@ export function ResponseFields({ values, onChange, errors }: FormProps) {
             <option value="">{t("wizard.response.modelPlaceholder")}</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.id === "default" ? t("wizard.response.defaultModel") : m.label}
+                {m.id === "default" ? (m.configured && m.label !== "default" ? t("wizard.response.defaultModelNamed", { name: m.label }) : t("wizard.response.defaultModel")) : m.label}
               </option>
             ))}
           </GlassSelect>
@@ -239,7 +239,7 @@ export function ResponseFields({ values, onChange, errors }: FormProps) {
 }
 
 /** 테스트 질문. live 에서는 실제 비용·사용량이 적용되고, demo 는 badge 로 구분한다. */
-export function TestChat({ botId, botName }: { botId: string | null; botName: string }) {
+export function TestChat({ botId, botName, draft }: { botId: string | null; botName: string; draft?: BotInput }) {
   const t = useTranslations();
   const { mode, actions } = useConsole();
   const [q, setQ] = React.useState("");
@@ -252,7 +252,7 @@ export function TestChat({ botId, botName }: { botId: string | null; botName: st
     if (!q.trim() || busy) return;
     setBusy(true);
     setError(null);
-    const res = await actions.testReply(botId, q, botName || t("wizard.untitled"));
+    const res = await actions.testReply(botId, q, botName || t("wizard.untitled"), draft);
     setBusy(false);
     if (res.ok) setAnswer(res.data);
     else setError(t(`errors.${res.error}`));

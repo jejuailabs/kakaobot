@@ -7,7 +7,6 @@ import type { Bot, ConsoleSnapshot, JoinRequest, PairingCode, Room } from "@/lib
 import { ConsoleProvider, consoleHref, type ActionError, type ConsoleActions, type Result, type WizardDraft } from "./console-context";
 
 // 실제 콘솔 데이터 계층: /api/v1/* 를 호출하고, 변경 후 서버 snapshot 을 다시 읽는다(router.refresh).
-// AI 테스트 답변(S5) 은 아직 API 가 없으므로 "아직 설정되지 않은 기능"으로 정직하게 응답한다.
 
 const KNOWN: ActionError[] = ["conflict", "limit", "validation", "not_found", "not_configured", "network", "invalid_state"];
 
@@ -28,8 +27,6 @@ async function call<T>(method: string, url: string, body?: unknown, headers: Rec
     return { ok: false, error: "network" };
   }
 }
-
-const notYet = async <T,>(): Promise<Result<T>> => ({ ok: false, error: "not_configured" });
 
 export function LiveConsoleProvider({ initial, canAdmin, children }: { initial: ConsoleSnapshot; canAdmin: boolean; children: React.ReactNode }) {
   const router = useRouter();
@@ -86,7 +83,10 @@ export function LiveConsoleProvider({ initial, canAdmin, children }: { initial: 
       async refresh() {
         router.refresh();
       },
-      testReply: notYet,
+      async testReply(botId, question, _botName, draft) {
+        const r = await call<{ reply: { text: string; demo: boolean } }>("POST", `/api/v1/bots/${encodeURIComponent(botId ?? "draft")}/test`, { question, values: botId ? undefined : draft });
+        return r.ok ? { ok: true, data: r.data.reply } : r;
+      },
     };
   }, [router]);
 

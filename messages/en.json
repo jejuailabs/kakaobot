@@ -349,7 +349,8 @@
       "dailyLimit": "Daily limit",
       "dailyLimitHint": "Maximum replies per day. Resets at midnight.",
       "noAutoReply": "The bot never replies to every message — only to messages starting with the trigger.",
-      "defaultModel": "Default model (applied once an AI provider is connected)"
+      "defaultModel": "Default model (applied once an AI provider is connected)",
+      "defaultModelNamed": "Default model ({name})"
     },
     "review": {
       "perDay": "{count} per day",
