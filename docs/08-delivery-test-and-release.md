@@ -51,7 +51,9 @@ Vercelpreview/prod 분리, Cloudflarequeue/DLQ/secrets, Oraclefirewall+volume+sy
 | S3 | **완료** — 실제 Firestore CRUD·wizard draft·A/B 격리 통합 테스트 | 2026-10-02 |
 | S4 | **mock 완료 / live 미검증** — 입장요청·운영자 승인·연결코드·서명 ingress·원자적 연결. Oracle relay·Cloudflare Queue 미구현 | 2026-10-03 |
 | S5 | **완료 (로컬 실 API) / 배포 환경 키 미설정** — gpt-6-luna 실제 답변, 한도·예산·로그·outbox | 2026-10-04 |
-| S6~S8 | 미구현 | — |
+| S6 | **완료** — 운영자 현황·회원·대화 로그·감사·실패 작업·게이트웨이 실데이터 | 2026-10-04 |
+| S7 | **완료 (업로드·적용·복원) / AI 생성 미설정** | 2026-10-04 |
+| S8 | 미실행 — Oracle·ReDroid·KakaoTalk·Iris 필요 | — |
 | S9 | 범위 외 | — |
 
 ### S0 — 미실행
@@ -177,3 +179,23 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 - 배포 환경 실제 답변: Vercel 에 `LLM_PROVIDER=openai`, `LLM_PROVIDER_API_KEY` 미설정 → 배포 사이트 테스트 답변은 "설정되지 않음" 응답.
 - Cloudflare Queue 대신 `after()` 처리(MVP). 처리 못 한 job 을 주기적으로 다시 처리하는 scheduler 미구현.
 - 실제 카카오톡 송수신은 S0/S8.
+
+### S6 — 운영자 실데이터 (2026-10-04)
+**구현**: 플랫폼 90일 사용량·DAU/MAU(로그인 기준)·활성 봇·연결 방·p95 지연·월 비용·모델 비중·오류 분류 / 회원 목록(봇·방·이번 달 사용량·비용·상태·일일 한도) / 정지·복원(세션 즉시 무효화, 신규 LLM·송신 차단)·한도 변경 / 대화 로그(목록은 서버에서 마스킹, 원문은 권한+사유로 열람 API 응답에만) / CSV 내보내기(별도 권한, 30일·1,000건, 마스킹, formula injection 방지) / 감사 이력 / 실패 job 재시도·송신 불명 건 수동 재전송 / 게이트웨이 heartbeat. 모든 변경은 사유 필수 + auditLogs. 화면·API 모두 서버 RBAC.
+
+| 검증 | 결과 |
+|---|---|
+| `npm run e2e:admin` (테스트 계정 4개 생성 후 삭제) | 23단계 → S7 포함 31단계. 3회 연속 ALL PASSED. 역할별 화면 접근(고객 /admin 404, designer 로그 404, analyst 회원 404), 목록 HTML 에 원문 전화번호 없음, analyst 원문 열람·내보내기 불가, 사유 없는 열람 400, 열람·정지·한도 감사 기록, CSV 마스킹·`'=` 무력화, 정지 즉시 기존 세션 401 |
+| 첫 실행 간헐 실패 | 코드 변경 직후 첫 실행에서 1~2건(세션 있는 요청이 307/401) 발생, 이후 반복 실행에서는 재현 안 됨. dev 서버 재컴파일 중 요청으로 추정하며 확정하지 못함. 비인증 원인 세션 실패는 서버 로그에 남기도록 변경 |
+| 통합 테스트 비결정성 수정 | 동시 연결 테스트의 승자 방을 고정 가정하던 테스트 버그 수정(제품 동작은 정상). 이 실패가 섞인 상태로 커밋 b371075 이 push 됨 → 실패 시 멈추는 `npm run verify` 도입 |
+
+### S7 — 배경 관리 (2026-10-04)
+**구현**: 업로드(브라우저 3000px 축소 → 서버 매직바이트 검사·EXIF 방향 반영·메타데이터 제거·desktop 2560/≤700KB, mobile 9:16/≤350KB, thumb/≤60KB 재인코딩, 1600px 미만 거절) → private draft → 미리보기 → 적용(siteAppearance 단일 transaction, expectedVersion 409, 이전 배경 previous, 감사) → 복원 → 사용 중 삭제 거절 → 사이트 문서별 최근 20 버전 유지. root layout 은 태그 캐시된 manifest 를 읽고 적용 시 `revalidateTag` 로 즉시 무효화, 실패 시 내장 배경.
+**편차**: Firebase Storage 버킷이 없음(신규 버킷은 Blaze 요금제 필요) → 재인코딩 결과를 Firestore Bytes 로 저장하고 `/api/v1/appearance/files` 로 제공(공개본 immutable 캐시, draft 는 권한자만). 원본 20MB 업로드 대신 브라우저 축소 후 4MB 이내 전송. AI 생성·자동 일정은 `IMAGE_PROVIDER_API_KEY` 미설정으로 "미설정" 응답(업로드는 독립 동작).
+
+| 검증 | 결과 |
+|---|---|
+| `tests/integration/appearance.test.ts` (운영과 분리된 site 문서) | 3 tests ×2회 통과 — SVG·작은 이미지·손상 파일 거절, EXIF 포함 JPEG → EXIF 없는 webp, 크기 목표 충족, draft 비공개, 적용 → 같은 버전 동시 적용 409 → 두 번째 적용 → 이전 previous 공개 → 사용 중 삭제 거절 → 복원(blur 설정 유지) → 삭제 |
+| 운영 데이터 영향 확인 | `siteAppearance/current` 없음(운영 배경 미변경), 테스트 자산·버전 0건 |
+| `npm run verify` | lint·types·unit 27·integration 25·build 통과 |
+| 배포 사이트 | /ko·/en·/ja·/ko/login·/ko/demo 200, 랜딩 HTML 에 내장 배경 manifest, 업로드 API 세션 없이 401, 없는 배경 파일 404 |
