@@ -47,8 +47,9 @@ Vercelpreview/prod 분리, Cloudflarequeue/DLQ/secrets, Oraclefirewall+volume+sy
 |---|---|---|
 | S0 | **미실행** — Oracle 계정·VM 접근 없음 | 2026-10-02 |
 | S1 | **완료 (mock/demo)** | 2026-10-02 |
-| S2 | **진행 중** — 로그인·session·workspace·RBAC 구현, 실제 Google 로그인 수동 확인 대기 | 2026-10-02 |
-| S3~S8 | 미구현 | — |
+| S2 | **완료** — 사용자가 배포 사이트에서 Google 로그인 성공 확인 | 2026-10-02 |
+| S3 | **완료** — 실제 Firestore CRUD·wizard draft·A/B 격리 통합 테스트 | 2026-10-02 |
+| S4~S8 | 미구현 | — |
 | S9 | 범위 외 | — |
 
 ### S0 — 미실행
@@ -111,7 +112,7 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 | client bundle 에 서비스 계정 키/이메일 검색 | 검출 없음 |
 
 **미실행 / 미해결**
-- 실제 Google 계정 로그인 → users/workspaces 생성 → 대시보드 진입: **사용자 수동 확인 대기**.
+- 실제 Google 계정 로그인 → 대시보드 진입: 2026-10-02 사용자가 kakaobot-nine.vercel.app 에서 성공 확인.
 - Firebase Emulator 기반 A/B 격리 integration test, 정지 회원 API 거절 test: 미실행 (Emulator 미설치, S3 CRUD API 와 함께 작성 예정).
 - 운영자 role 부여 도구(custom claim 설정 스크립트): 미구현.
 - 서비스 계정 키가 대화창에 노출됨 → 로그인 확인 후 키 재발급(rotate) 권장.
@@ -122,3 +123,15 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 - 수정: package.json `overrides` 로 firebase-admin 하위 jwks-rsa 를 3.2.2(jose 4, CommonJS)로 고정. `node --no-experimental-require-module` 로 로컬 재현(수정 전 실패/후 성공) + verifyIdToken·createSessionCookie·verifySessionCookie 통과 확인.
 - 배포 확인: 진단 route 전 단계 OK, `DELETE /api/v1/auth/session` 403, 위조 token 401, `/ko/dashboard` → 307 `/login`. 진단 route 삭제 후 404 확인.
 - 재발 방지: 배포 관련 수정은 배포된 URL 에서 직접 응답을 확인한 뒤에만 완료로 보고한다. 빌드는 webpack 유지(`next build --webpack`).
+
+### S3 — 챗봇 CRUD·wizard·격리 (2026-10-02)
+**구현**: `/api/v1/bots`(GET, POST+Idempotency-Key), `/api/v1/bots/:id`(GET, PATCH+expectedVersion→409, DELETE), `/api/v1/bots/:id/pause`, `/api/v1/drafts/:id`(GET, PUT, DELETE). 공통 `userRoute`: 변경 요청 Origin+CSRF, 검증된 session, 정지 회원 거절, workspace 는 session 에서만. Firestore transaction 으로 생성(workspace 한도·idempotency)·수정(프롬프트 변경 시 버전)·삭제(soft delete + 프롬프트 삭제 + 방 퇴장 ops 요청). 모델은 S5 전까지 "기본 모델 (AI 제공사 연결 후 적용)" 로 표시. 라이트/다크 입력칸 경계 대비 3:1 이상으로 수정(#7A90A2 / #7F9FB8).
+
+| 검증 | 결과 |
+|---|---|
+| `npm run test:integration` (실제 Firestore, 임시 workspace 후 삭제) | 10 tests 통과 — A 의 봇이 B 목록에 없음, B 의 조회·수정·정지·삭제 404, 동일 key 동시 생성 1건, 다른 workspace 의 같은 key 독립, 버전 불일치 409, 한도 초과 limit, draft 상태 정지 불가, 호출어 공백 validation, draft 격리, 삭제 후 미노출. 남은 테스트 문서 0건 확인 |
+| 로컬 브라우저 (테스트 사용자 session, 종료 후 사용자·데이터 삭제) | wizard 입력 → 새로고침 후 서버 draft 복구 → 생성 → 상세(방 연결 탭) → 이름 수정 저장 → 목록 반영 → 삭제 확인 → 빈 목록 |
+| 배포 사이트 curl | `GET /api/v1/bots` 401, CSRF 없는 POST 403, 세션 없는 draft PUT 401, CSS 에 입력 경계 토큰 반영 |
+| unit / lint / build | 19 tests 통과 / 통과 / 통과 |
+
+**미실행**: 배포 사이트에서 실제 Google 계정으로 챗봇 생성(사용자 확인 필요). Firebase Emulator 는 JDK 21 필요(이 PC JDK 17)로 미사용 — 대신 실제 프로젝트에 임시 workspace 로 통합 테스트.
