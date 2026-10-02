@@ -711,7 +711,9 @@
       "applyConfirm": "Apply this background?",
       "asset": "Asset",
       "applied": "Background applied",
-      "demoApplyNote": "In the demo only this list changes; the real site background stays the same."
+      "demoApplyNote": "In the demo only this list changes; the real site background stays the same.",
+      "deleted": "Background deleted",
+      "tooComplex": "This image is too detailed to meet the size limit. Try another image."
     },
     "liveNotReadyTitle": "Operator data not connected yet",
     "liveNotReadyDesc": "Your permission is confirmed. Real member, conversation and background data will be connected in the next stages (S6, S7). You can preview the screens in the demo."

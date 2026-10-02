@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { csrfToken } from "@/lib/client/firebase";
-import { AdminProvider, type AdminActions, type AdminCtx, type AdminRole } from "../admin-context";
+import { AdminProvider, type AdminCtx, type AdminRole } from "../admin-context";
 
 async function send(method: string, url: string, body?: unknown) {
   const res = await fetch(url, {
@@ -18,13 +18,17 @@ async function send(method: string, url: string, body?: unknown) {
 
 /** 실제 운영자 데이터 계층: /api/v1/admin/* 호출 후 서버 데이터를 다시 읽는다. 권한은 서버가 판정한다. */
 export function LiveAdminProvider({ data, role, children }: { data: AdminCtx["data"]; role: AdminRole; children: React.ReactNode }) {
+  const versionRef = React.useRef(data.appearanceVersion ?? 0);
+  React.useEffect(() => {
+    versionRef.current = data.appearanceVersion ?? 0;
+  }, [data.appearanceVersion]);
   const router = useRouter();
   const [revealed, setRevealed] = React.useState<Set<string>>(new Set());
   const [revealedText, setRevealedText] = React.useState<Record<string, { input: string; output: string }>>({});
 
   const actions = React.useMemo<AdminCtx["actions"]>(() => {
     const done = () => router.refresh();
-    const a: AdminActions & { exportCsv(days: number, reason: string): Promise<boolean> } = {
+    const a: AdminCtx["actions"] = {
       async setMemberStatus(uid, status, reason) {
         await send("PATCH", `/api/v1/admin/members/${encodeURIComponent(uid)}`, { action: "status", status, reason });
         done();
@@ -57,9 +61,37 @@ export function LiveAdminProvider({ data, role, children }: { data: AdminCtx["da
           return false;
         }
       },
-      // 배경 관리(S7)·입장 처리(별도 화면)는 이 provider 를 쓰지 않는다
-      async publishAsset() {},
-      async rollback() {},
+      async publishAsset(assetId, theme, reason, settings) {
+        await send("POST", "/api/v1/admin/appearance/publish", { assetId, theme, settings, reason, expectedVersion: versionRef.current });
+        done();
+      },
+      async rollback(assetId, reason) {
+        await send("POST", "/api/v1/admin/appearance/rollback", { assetId, reason, expectedVersion: versionRef.current });
+        done();
+      },
+      async uploadFile(file, theme, label) {
+        const form = new FormData();
+        form.set("file", file);
+        form.set("theme", theme);
+        form.set("label", label);
+        const res = await fetch("/api/v1/admin/appearance/uploads", { method: "POST", credentials: "same-origin", headers: { "x-katcha-csrf": csrfToken() }, body: form });
+        if (res.ok) {
+          done();
+          return null;
+        }
+        const j = (await res.json().catch(() => null)) as { error?: { messageKey?: string } } | null;
+        return j?.error?.messageKey ?? "errors.network";
+      },
+      async deleteAsset(assetId) {
+        try {
+          await send("DELETE", `/api/v1/admin/appearance/assets/${encodeURIComponent(assetId)}`);
+          done();
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      // demo 전용 (live 업로드는 uploadFile) / 입장 처리는 별도 화면
       addUpload() {},
       async resolveJoin() {},
     };

@@ -37,11 +37,16 @@ export type AdminMetrics = {
 export type AdminCtx = {
   mode: "demo" | "live";
   role: AdminRole;
-  data: DemoAdminData & { usage?: UsageDay[]; metrics?: AdminMetrics };
+  data: DemoAdminData & { usage?: UsageDay[]; metrics?: AdminMetrics; appearanceVersion?: number };
   revealed: Set<string>;
   /** live: 서버에서 받은 원문 (열람한 건만) */
   revealedText?: Record<string, { input: string; output: string }>;
-  actions: AdminActions & { exportCsv?(days: number, reason: string): Promise<boolean> };
+  actions: AdminActions & {
+    exportCsv?(days: number, reason: string): Promise<boolean>;
+    /** live: 서버 업로드 (성공 시 null, 실패 시 오류 메시지 key) */
+    uploadFile?(file: Blob, theme: "light" | "dark", label: string): Promise<string | null>;
+    deleteAsset?(assetId: string): Promise<boolean>;
+  };
 };
 
 const AdminContext = React.createContext<AdminCtx | null>(null);

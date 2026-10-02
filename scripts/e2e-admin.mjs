@@ -109,6 +109,36 @@ try {
   step("analyst cannot change member status (404)", st === 404, st);
   const audit2 = await db.collection("auditLogs").where("actorUid", "==", users.admin.uid).get();
   step("suspend + limit audited", ["member.suspend", "member.limit"].every((a) => audit2.docs.some((d) => d.data().action === a)));
+
+  // 배경 관리 (적용은 운영 배경을 바꾸므로 여기서 하지 않음 — tests/integration/appearance.test.ts 가 분리된 문서로 검증)
+  [st] = await call(s.designer, "GET", "/ko/admin/appearance");
+  step("designer: appearance 200", st === 200, st);
+  [st] = await call(s.analyst, "GET", "/ko/admin/appearance");
+  step("analyst: appearance 404", st === 404, st);
+  const sharp = (await import("sharp")).default;
+  const jpg = await sharp({ create: { width: 2000, height: 1200, channels: 3, background: { r: 30, g: 80, b: 120 } } }).jpeg().toBuffer();
+  const form = new FormData();
+  form.set("file", new Blob([jpg], { type: "image/jpeg" }), "e2e.jpg");
+  form.set("theme", "dark");
+  form.set("label", "e2e upload");
+  let r = await fetch(`${BASE}/api/v1/admin/appearance/uploads`, { method: "POST", headers: { origin: BASE, cookie: `katcha_session=${s.designer}; katcha_csrf=${csrf}`, "x-katcha-csrf": csrf }, body: form });
+  const up = await r.json().catch(() => null);
+  step("designer uploads background (draft)", r.status === 200 && Boolean(up?.asset?.id), r.status);
+  if (up?.asset?.id) {
+    r = await fetch(`${BASE}/api/v1/appearance/files/${up.asset.id}/desktop`);
+    step("draft image hidden from anonymous (404)", r.status === 404, r.status);
+    r = await fetch(`${BASE}/api/v1/appearance/files/${up.asset.id}/thumb`, { headers: { cookie: `katcha_session=${s.designer}` } });
+    step("designer can preview draft", r.status === 200 && r.headers.get("content-type") === "image/webp", r.status);
+    [st] = await call(s.designer, "DELETE", `/api/v1/admin/appearance/assets/${up.asset.id}`);
+    step("designer deletes unused draft", st === 200, st);
+  }
+  const svgForm = new FormData();
+  svgForm.set("file", new Blob(['<svg xmlns="http://www.w3.org/2000/svg"/>'], { type: "image/jpeg" }), "fake.jpg");
+  svgForm.set("theme", "dark");
+  r = await fetch(`${BASE}/api/v1/admin/appearance/uploads`, { method: "POST", headers: { origin: BASE, cookie: `katcha_session=${s.designer}; katcha_csrf=${csrf}`, "x-katcha-csrf": csrf }, body: svgForm });
+  step("SVG disguised as JPEG rejected (415)", r.status === 415, r.status);
+  [st] = await call(s.designer, "POST", "/api/v1/admin/appearance/generate", {});
+  step("AI generation reports not configured (503)", st === 503, st);
 } finally {
   const wsIds = Object.values(users).map((u) => `ws_${u.uid}`);
   for (const id of Object.values(users).map((u) => u.uid)) {

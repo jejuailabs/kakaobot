@@ -97,6 +97,24 @@ export function AppearanceView() {
     if (file.size > MAX_BYTES) return setUploadError(t("admin.appearance.tooLarge"));
     const kind = await sniff(file);
     if (!kind || !ALLOWED.includes(kind)) return setUploadError(t("admin.appearance.badType"));
+    if (actions.uploadFile) {
+      // 브라우저에서 긴 변 3000px·JPEG 로 줄여 보낸다(요청 한도). 서버가 다시 검증·재인코딩·EXIF 제거.
+      const bitmap = await createImageBitmap(file).catch(() => null);
+      if (!bitmap) return setUploadError(t("admin.appearance.badType"));
+      if (bitmap.width < 1600) return setUploadError(t("admin.appearance.tooSmall", { min: 1600 }));
+      const scale = Math.min(1, 3000 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.9));
+      if (!blob) return setUploadError(t("admin.appearance.badType"));
+      const label = file.name.split(".").slice(0, -1).join(".").slice(0, 40) || file.name.slice(0, 40);
+      const err = await actions.uploadFile(blob, theme, label);
+      if (err) return setUploadError(err.startsWith("admin.") || err.startsWith("errors.") ? t(err, { min: 1600 }) : t("errors.network"));
+      toast(t("admin.appearance.uploaded"));
+      return;
+    }
     const url = URL.createObjectURL(file);
     const width = await new Promise<number>((resolve) => {
       const img = new Image();
@@ -209,13 +227,27 @@ export function AppearanceView() {
                         {t("admin.appearance.restore")}
                       </Button>
                     )}
-                    <Tooltip content={a.state === "active" ? t("admin.appearance.inUse") : t("admin.appearance.deleteLater")}>
-                      <span>
-                        <Button size="icon" variant="ghost" disabled aria-label={t("common.delete")}>
-                          <Trash2 aria-hidden />
-                        </Button>
-                      </span>
-                    </Tooltip>
+                    {actions.deleteAsset && a.state !== "active" ? (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={t("common.delete")}
+                        onClick={async () => {
+                          const ok = await actions.deleteAsset?.(a.id);
+                          toast(ok ? t("admin.appearance.deleted") : t("admin.appearance.inUse"), ok ? "success" : "error");
+                        }}
+                      >
+                        <Trash2 aria-hidden />
+                      </Button>
+                    ) : (
+                      <Tooltip content={a.state === "active" ? t("admin.appearance.inUse") : t("admin.appearance.deleteLater")}>
+                        <span>
+                          <Button size="icon" variant="ghost" disabled aria-label={t("common.delete")}>
+                            <Trash2 aria-hidden />
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    )}
                   </span>
                 </li>
               ))}
