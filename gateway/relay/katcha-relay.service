@@ -1,0 +1,23 @@
+# /etc/systemd/system/katcha-relay.service
+# Oracle VM 에서 relay 를 상시 실행한다. 비밀값은 /etc/katcha/relay.env (권한 600, root 소유)에 둔다.
+[Unit]
+Description=Katcha KakaoTalk relay (Iris <-> web)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=katcha
+WorkingDirectory=/opt/katcha
+EnvironmentFile=/etc/katcha/relay.env
+ExecStart=/usr/bin/node --no-warnings gateway/relay/relay.ts
+Restart=on-failure
+RestartSec=5
+# relay 콜백 서버는 127.0.0.1 에만 bind 한다. 외부 포트를 열지 않는다.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/katcha
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

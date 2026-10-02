@@ -266,7 +266,7 @@ export async function leaseOutbox(gatewayId: string) {
   if (await killSwitchOn()) return [];
   const snap = await db().collection("deliveries").where("gatewayId", "==", gatewayId).where("state", "in", ["queued", "leased"]).limit(30).get();
   const now = Date.now();
-  const leased: { id: string; roomId: string; text: string }[] = [];
+  const leased: { id: string; roomId: string; text: string; createdAt: string }[] = [];
   // 정지된 회원 workspace 의 송신은 내보내지 않는다
   const suspended = new Set<string>();
   for (const wsId of new Set(snap.docs.map((d) => d.data().workspaceId as string))) {
@@ -285,7 +285,7 @@ export async function leaseOutbox(gatewayId: string) {
       tx.update(d.ref, { state: "leased", leaseUntil: Timestamp.fromMillis(now + 60_000), attempt: FieldValue.increment(1) });
       return true;
     });
-    if (ok) leased.push({ id: d.id, roomId: d.data().roomId, text: d.data().text });
+    if (ok) leased.push({ id: d.id, roomId: d.data().roomId, text: d.data().text, createdAt: (d.data().createdAt as Timestamp | undefined)?.toDate().toISOString() ?? new Date().toISOString() });
   }
   return leased;
 }

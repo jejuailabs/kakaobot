@@ -199,3 +199,13 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 | 운영 데이터 영향 확인 | `siteAppearance/current` 없음(운영 배경 미변경), 테스트 자산·버전 0건 |
 | `npm run verify` | lint·types·unit 27·integration 25·build 통과 |
 | 배포 사이트 | /ko·/en·/ja·/ko/login·/ko/demo 200, 랜딩 HTML 에 내장 배경 manifest, 업로드 API 세션 없이 401, 없는 배경 파일 404 |
+
+### S4 보완 — Oracle relay 프로그램 (2026-10-04, mock 검증 · 실기기 미검증)
+**구현** (`gateway/relay/`, Node 22 내장 `node:sqlite`, 네이티브 의존성 없음): Iris 콜백 수신(127.0.0.1 전용) → 정규화 → self 판별(SELF_SENDER_ID 또는 최근 2분 내 같은 방 같은 문장 송신 journal) → SQLite inbox 선기록(같은 eventId 1회) → 서명 전송, 실패 시 같은 eventId 로 1/2/4/8/30초 backoff+jitter, 4xx 는 dead 보관. outbox 2초 poll → 10분 넘은 송신은 stale 로 거절(복구 cutoff) → journal 선기록 → Iris `/reply` → 결과 ack. 송신 timeout 은 unknown, 송신 중 크래시는 재시작 시 unknown 보고, 둘 다 재전송 안 함. heartbeat 30초. systemd 유닛·설치 안내(`gateway/README.md`).
+**미검증**: Iris 콜백 payload 필드 매핑(추정), 실제 `/reply` 동작, Oracle VM·ReDroid 호환성. Cloudflare Worker + Queue 는 미구현(relay → web ingress 직결).
+
+| 검증 | 결과 |
+|---|---|
+| `npm run e2e:relay` (relay 실제 프로세스 + mock 어댑터 + 실제 web·Firestore·gpt-6-luna) | 9단계 ×2회 ALL PASSED — web 다운 중 수신 이벤트 SQLite 보존 → 재시작 후 같은 eventId 전달·연결, 중복 콜백 1회만 저장, 연결 안내·실제 AI 답변 방 송신, ack sent, 봇 자기 메시지 재유입 ignored_self, 송신 timeout → unknown 보고 → 재전송 없음 |
+| unit (`relay-adapter.test.ts`) | 큰 숫자 ID 문자열 유지·sender hash·native ID 없을 때 결정적 eventId·필수값 없으면 폐기 |
+| `npm run verify` | unit 30 · integration 25 · build 통과 |
