@@ -115,3 +115,10 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 - Firebase Emulator 기반 A/B 격리 integration test, 정지 회원 API 거절 test: 미실행 (Emulator 미설치, S3 CRUD API 와 함께 작성 예정).
 - 운영자 role 부여 도구(custom claim 설정 스크립트): 미구현.
 - 서비스 계정 키가 대화창에 노출됨 → 로그인 확인 후 키 재발급(rotate) 권장.
+
+**배포 장애 기록 (2026-10-02)** — Vercel 에서 firebase-admin 을 쓰는 모든 경로가 빈 500.
+- 1차(번들 제외 설정)·2차(webpack 빌드) 수정은 원인 확인 없이 적용해 효과 없었음. 이후 임시 진단 route 로 Vercel 에서 직접 확인.
+- 원인: firebase-admin 14 → jwks-rsa 4.1.0 이 ESM 전용 jose 6 을 `require()` — Vercel(Node 22.23.2)에서 `ERR_REQUIRE_ESM`. 로컬 Node 는 require(esm) 을 허용해 드러나지 않았음.
+- 수정: package.json `overrides` 로 firebase-admin 하위 jwks-rsa 를 3.2.2(jose 4, CommonJS)로 고정. `node --no-experimental-require-module` 로 로컬 재현(수정 전 실패/후 성공) + verifyIdToken·createSessionCookie·verifySessionCookie 통과 확인.
+- 배포 확인: 진단 route 전 단계 OK, `DELETE /api/v1/auth/session` 403, 위조 token 401, `/ko/dashboard` → 307 `/login`. 진단 route 삭제 후 404 확인.
+- 재발 방지: 배포 관련 수정은 배포된 URL 에서 직접 응답을 확인한 뒤에만 완료로 보고한다. 빌드는 webpack 유지(`next build --webpack`).
