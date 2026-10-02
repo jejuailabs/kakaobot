@@ -1,11 +1,12 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { cache } from "react";
-import { ADMIN_ROLES, type AdminRole } from "@/lib/shared/rbac";
+import { ADMIN_ROLES, isOperatorEmail, type AdminRole } from "@/lib/shared/rbac";
 import { adminAuth, isAdminConfigured } from "./firebase-admin";
 import { getUserRecord, workspaceIdFor, type UserStatus } from "./workspace";
 
 export const SESSION_COOKIE = "katcha_session";
+
 export const SESSION_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000; // 최대 5일 (docs/05)
 
 export type SessionUser = {
@@ -32,6 +33,9 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     const decoded = await adminAuth().verifySessionCookie(value, true);
     const record = await getUserRecord(decoded.uid);
     const claimRoles = Array.isArray(decoded.roles) ? (decoded.roles as unknown[]) : [];
+    // 운영자 이메일 (사용자 결정, 2026-10-04): OPERATOR_EMAILS 에 있고 Google 에서 인증된 이메일이면 superadmin.
+    // docs/05 의 "이메일로 권한 판정 금지"와 다른 운영 방식이며 docs/08 에 기록했다. custom claim 방식도 함께 유효.
+    if (isOperatorEmail(decoded.email, decoded.email_verified === true, decoded.firebase?.sign_in_provider)) claimRoles.push("superadmin");
     return {
       uid: decoded.uid,
       email: record?.email ?? decoded.email ?? "",

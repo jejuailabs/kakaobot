@@ -17,16 +17,18 @@ async function img(width: number, height: number, withExif = false) {
 
 let mod: typeof import("@/lib/server/appearance");
 let db: ReturnType<(typeof import("@/lib/server/firebase-admin"))["adminDb"]>;
+let bucket: ReturnType<(typeof import("@/lib/server/firebase-admin"))["adminBucket"]>;
 
 beforeAll(async () => {
   mod = await import("@/lib/server/appearance");
   db = (await import("@/lib/server/firebase-admin")).adminDb();
+  bucket = (await import("@/lib/server/firebase-admin")).adminBucket();
 });
 
 afterAll(async () => {
   for (const id of created) {
     await db.collection("backgroundAssets").doc(id).delete();
-    for (const v of ["desktop", "mobile", "thumb"]) await db.collection("backgroundAssetFiles").doc(`${id}_${v}`).delete();
+    await Promise.all(["desktop", "mobile", "thumb"].map((v) => bucket.file(`backgrounds/${id}/${v}.webp`).delete({ ignoreNotFound: true })));
   }
   const versions = await db.collection("backgroundVersions").where("site", "==", SITE).get();
   await Promise.all(versions.docs.map((d) => d.ref.delete()));
@@ -67,8 +69,14 @@ describe("background appearance (real Firestore, isolated site doc)", () => {
     created.push(b);
     const settings = { overlay: 0.2, blur: 2, brightness: 1, scope: "all" as const };
 
+    const draftUrl = `https://storage.googleapis.com/${bucket.name}/backgrounds/${a}/desktop.webp`;
+    expect((await fetch(draftUrl)).status).toBe(403); // draft 는 Storage 에서도 비공개
     await mod.publishAsset(actor, a, "dark", settings, 0, "첫 적용");
-    expect((await mod.getActiveAppearanceUncached()).dark.desktopUrl).toContain(a);
+    const active = await mod.getActiveAppearanceUncached();
+    expect(active.dark.desktopUrl).toBe(draftUrl);
+    const pub = await fetch(active.dark.desktopUrl);
+    expect(pub.status).toBe(200); // 적용 후 공개 + 불변 캐시
+    expect(pub.headers.get("cache-control")).toContain("immutable");
     await expect(mod.publishAsset(actor, b, "dark", settings, 0, "늦은 적용")).rejects.toMatchObject({ code: "conflict" });
 
     await mod.publishAsset(actor, b, "dark", settings, 1, "두 번째 적용");

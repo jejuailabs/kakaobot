@@ -5,7 +5,7 @@
 ```
 Iris 콜백 ──▶ relay(127.0.0.1:8790) ──▶ SQLite inbox ──▶ 서명 POST /api/internal/gateways/:gw/events
                                    ◀── 2초 poll  POST /api/internal/gateways/:gw/outbox
-              journal 기록 ──▶ Iris POST /reply ──▶ ack (sent | failed | unknown)
+              journal 기록 ──▶ Iris POST /reply ──▶ POST /api/internal/gateways/:gw/ack (sent | failed | unknown)
               30초 heartbeat ──▶ POST /api/internal/gateways/:gw/heartbeat
 ```
 

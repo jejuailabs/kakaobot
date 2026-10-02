@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// 클라이언트 SDK 의 Storage 직접 접근은 모두 막는다. 업로드·삭제는 서버(Firebase Admin)만 한다.
+// 적용된 배경은 서버가 객체 단위로 공개(ACL)하므로 이 규칙과 무관하게 storage.googleapis.com URL 로 제공된다.
+// 2026-10-04 kakaobot-6fea2.firebasestorage.app 에 배포된 규칙과 동일함을 확인.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -41,3 +41,16 @@ const GRANTS: Record<AdminRole, readonly Permission[]> = {
 export function can(roles: readonly AdminRole[], permission: Permission): boolean {
   return roles.some((r) => GRANTS[r]?.includes(permission));
 }
+
+/**
+ * 운영자 이메일 (사용자 결정, 2026-10-04): OPERATOR_EMAILS="a@x.com,b@y.com" 에 있는 이메일을 superadmin 으로 본다.
+ * Google 로그인 + Google 이 인증한 이메일만 인정, 대소문자·공백 무시. docs/05 와 다른 방식이며 docs/08 에 기록.
+ */
+export function isOperatorEmail(email: string | undefined, verified: boolean, provider: string | undefined, raw: string | undefined = process.env.OPERATOR_EMAILS): boolean {
+  if (!email || !verified || provider !== "google.com" || !raw) return false;
+  return raw
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(email.trim().toLowerCase());
+}

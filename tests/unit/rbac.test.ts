@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { can } from "@/lib/shared/rbac";
+import { can, isOperatorEmail } from "@/lib/shared/rbac";
 
 describe("RBAC (docs/05)", () => {
   it("designer 는 대화 로그를 볼 수 없다", () => {
@@ -17,5 +17,19 @@ describe("RBAC (docs/05)", () => {
   });
   it("권한 없는 일반 고객은 운영자 화면 불가", () => {
     expect(can([], "admin.view")).toBe(false);
+  });
+});
+
+describe("OPERATOR_EMAILS", () => {
+  const raw = " Jejuailabs@gmail.com , other@x.com ";
+  it("목록에 있는 Google 인증 이메일만 운영자", () => {
+    expect(isOperatorEmail("jejuailabs@gmail.com", true, "google.com", raw)).toBe(true);
+    expect(isOperatorEmail("OTHER@x.com", true, "google.com", raw)).toBe(true);
+  });
+  it("미인증 이메일·다른 provider·목록 밖·미설정은 거부", () => {
+    expect(isOperatorEmail("jejuailabs@gmail.com", false, "google.com", raw)).toBe(false);
+    expect(isOperatorEmail("jejuailabs@gmail.com", true, "password", raw)).toBe(false);
+    expect(isOperatorEmail("jejuailabs@gmail.com.evil.com", true, "google.com", raw)).toBe(false);
+    expect(isOperatorEmail("jejuailabs@gmail.com", true, "google.com", "")).toBe(false);
   });
 });

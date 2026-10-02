@@ -4,11 +4,12 @@ import { unstable_cache } from "next/cache";
 import sharp, { type Sharp } from "sharp";
 import { DEFAULT_APPEARANCE, type AppearanceManifest, type BackgroundVariant } from "@/lib/shared/appearance";
 import { apiError } from "./api";
-import { adminDb } from "./firebase-admin";
+import { adminBucket, adminDb } from "./firebase-admin";
 
 // Liquid Glass 배경 관리 (docs/02, docs/07).
-// Firebase Storage 미사용(프로젝트에 버킷 없음, 신규 버킷은 Blaze 필요) → 재인코딩된 webp 를 Firestore Bytes 로 저장하고 /api/v1/appearance/files 로 제공.
-// 크기 목표: desktop ≤700KB, mobile ≤350KB, thumb ≤60KB → 문서 한도(1MiB) 안.
+// 재인코딩된 webp 를 Firebase Storage `backgrounds/{assetId}/{variant}.webp` 에 저장한다.
+// draft 는 비공개(운영자만 /api/v1/appearance/files 로 미리보기), 적용하면 공개 객체로 바꿔 CDN 캐시 URL 로 제공한다.
+// 크기 목표: desktop ≤700KB, mobile ≤350KB, thumb ≤60KB.
 
 const db = () => adminDb();
 export const APPEARANCE_TAG = "appearance";
@@ -62,11 +63,21 @@ export async function processUpload(actor: Actor, buf: Buffer, theme: Theme, lab
   const luminance = Math.round(stats.channels[0].mean);
 
   const ref = db().collection("backgroundAssets").doc();
-  const files = db().collection("backgroundAssetFiles");
+  // 파일을 먼저 Storage 에 비공개로 올리고, 성공한 뒤에 asset 문서를 만든다
+  await Promise.all(
+    (
+      [
+        ["desktop", desktop],
+        ["mobile", mobile],
+        ["thumb", thumb],
+      ] as const
+    ).map(([variant, data]) =>
+      adminBucket()
+        .file(objectPath(ref.id, variant))
+        .save(data, { resumable: false, contentType: "image/webp", metadata: { cacheControl: "private, max-age=0" } }),
+    ),
+  );
   const batch = db().batch();
-  batch.set(files.doc(`${ref.id}_desktop`), { assetId: ref.id, variant: "desktop", data: desktop, bytes: desktop.length });
-  batch.set(files.doc(`${ref.id}_mobile`), { assetId: ref.id, variant: "mobile", data: mobile, bytes: mobile.length });
-  batch.set(files.doc(`${ref.id}_thumb`), { assetId: ref.id, variant: "thumb", data: thumb, bytes: thumb.length });
   batch.set(ref, {
     id: ref.id,
     source: "upload",
@@ -106,12 +117,31 @@ export async function listAppearance() {
   };
 }
 
+const VARIANTS = ["desktop", "mobile", "thumb"] as const;
+function objectPath(assetId: string, variant: (typeof VARIANTS)[number]) {
+  return `backgrounds/${assetId}/${variant}.webp`;
+}
+function publicUrl(assetId: string, variant: (typeof VARIANTS)[number]) {
+  return `https://storage.googleapis.com/${adminBucket().name}/${objectPath(assetId, variant)}`;
+}
+
+/** 적용 시 공개 객체로 전환 + 불변 캐시 (asset ID 마다 내용이 고정이라 immutable) */
+async function makeAssetPublic(assetId: string) {
+  await Promise.all(
+    VARIANTS.map(async (v) => {
+      const f = adminBucket().file(objectPath(assetId, v));
+      await f.setMetadata({ cacheControl: "public, max-age=31536000, immutable" });
+      await f.makePublic();
+    }),
+  );
+}
+
 function variantFor(assetId: string, s: AppearanceSettings, theme: Theme): BackgroundVariant {
   const tint = theme === "dark" ? "6, 26, 42" : "234, 245, 250";
   return {
     versionId: assetId,
-    desktopUrl: `/api/v1/appearance/files/${assetId}/desktop`,
-    mobileUrl: `/api/v1/appearance/files/${assetId}/mobile`,
+    desktopUrl: publicUrl(assetId, "desktop"),
+    mobileUrl: publicUrl(assetId, "mobile"),
     overlay: `rgba(${tint}, ${Math.min(0.6, Math.max(0, s.overlay))})`,
     blurPx: Math.min(8, Math.max(0, Math.round(s.blur))),
     brightness: Math.min(1.2, Math.max(0.6, s.brightness)),
@@ -127,6 +157,10 @@ function variantFor(assetId: string, s: AppearanceSettings, theme: Theme): Backg
 export async function publishAsset(actor: Actor, assetId: string, theme: Theme, settings: AppearanceSettings, expectedVersion: number, reason: string) {
   const siteRef = db().collection("siteAppearance").doc(SITE());
   const assetRef = db().collection("backgroundAssets").doc(assetId);
+  const pre = await assetRef.get();
+  if (!pre.exists || pre.data()?.deletedAt || pre.data()?.theme !== theme) throw apiError(404, "not_found");
+  // 공개 전환을 transaction 전에 끝낸다. transaction 이 실패해도(예: 409) 고객 화면은 바뀌지 않는다.
+  await makeAssetPublic(assetId);
   await db().runTransaction(async (tx) => {
     const [site, asset] = await Promise.all([tx.get(siteRef), tx.get(assetRef)]);
     const version = (site.data()?.version as number | undefined) ?? 0;
@@ -173,9 +207,9 @@ export async function deleteAsset(actor: Actor, assetId: string) {
   if (!snap.exists) throw apiError(404, "not_found");
   const batch = db().batch();
   batch.update(ref, { deletedAt: FieldValue.serverTimestamp(), state: "deleted" });
-  for (const v of ["desktop", "mobile", "thumb"]) batch.delete(db().collection("backgroundAssetFiles").doc(`${assetId}_${v}`));
   batch.set(db().collection("auditLogs").doc(), { actorUid: actor.uid, actorRole: actor.roles.join(","), workspaceId: null, action: "appearance.delete", targetId: assetId, reason: "", at: FieldValue.serverTimestamp() });
   await batch.commit();
+  await Promise.all(VARIANTS.map((v) => adminBucket().file(objectPath(assetId, v)).delete({ ignoreNotFound: true })));
 }
 
 async function pruneVersions() {
@@ -193,10 +227,15 @@ async function pruneVersions() {
 }
 
 export async function readAssetFile(assetId: string, variant: string) {
-  if (!/^[A-Za-z0-9]{10,40}$/.test(assetId) || !["desktop", "mobile", "thumb"].includes(variant)) return null;
-  const [file, asset] = await Promise.all([db().collection("backgroundAssetFiles").doc(`${assetId}_${variant}`).get(), db().collection("backgroundAssets").doc(assetId).get()]);
-  if (!file.exists || !asset.exists || asset.data()?.deletedAt) return null;
-  return { data: Buffer.from(file.data()!.data as Uint8Array), published: asset.data()!.state !== "draft" };
+  if (!/^[A-Za-z0-9]{10,40}$/.test(assetId) || !(VARIANTS as readonly string[]).includes(variant)) return null;
+  const asset = await db().collection("backgroundAssets").doc(assetId).get();
+  if (!asset.exists || asset.data()?.deletedAt) return null;
+  try {
+    const [data] = await adminBucket().file(objectPath(assetId, variant as (typeof VARIANTS)[number])).download();
+    return { data, published: asset.data()!.state !== "draft" };
+  } catch {
+    return null;
+  }
 }
 
 /** 캐시 없이 현재 manifest 를 읽는다 (테스트·운영자 미리보기용) */

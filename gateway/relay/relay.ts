@@ -102,7 +102,7 @@ export function createRelay(cfg: Config, adapter: ChatAdapter = cfg.adapter === 
 
   async function ack(deliveryId: string, result: "sent" | "failed" | "unknown", detail?: string) {
     try {
-      const res = await signedPost(`deliveries/${encodeURIComponent(deliveryId)}/ack`, { result, detail });
+      const res = await signedPost("ack", { deliveryId, result, detail });
       if (res.ok) store.journalAcked(deliveryId);
     } catch {
       /* 다음 poll 주기에 unackedResults 로 다시 보낸다 */

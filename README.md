@@ -3,7 +3,7 @@
 공용 카카오톡 봇 계정을 여러 고객의 방에 수동 입장시키고, 방마다 고객이 고른 AI 역할·호출어·프롬프트를 적용하는 멀티테넌트 SaaS.
 구현 기준은 `CLAUDE.md` → `docs/01`~`08` 순서이며, 진행 상태는 `docs/08` 진행표에 실제 결과로 기록한다.
 
-> 현재 단계: **S1 완료 (디자인 shell + 전체 demo 화면)**. Google 로그인·DB·카카오톡 실연동은 아직 없다.
+> 현재 단계: S1~S7 완료(로그인·챗봇·연결·AI 답변·운영자·배경). 실제 카카오톡 연결(S0/S8)은 Oracle 서버 설치 후 검증한다. 진행표는 `docs/08`.
 
 ## 실행 (Windows PowerShell / macOS / Linux 공통)
 
@@ -35,10 +35,27 @@ npm run dev
 | `npm run build` / `npm start` | 프로덕션 빌드 / 실행 |
 | `npm run typecheck` | route 타입 생성 + `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest 단위 테스트 (호출어, 연결 코드, 마스킹, CSV, URL 검증, i18n key 일치) |
+| `npm test` | 단위 테스트 |
+| `npm run test:integration` | 실제 Firestore·OpenAI 통합 테스트 (임시 데이터 생성 후 삭제) |
+| `npm run verify` | lint·타입·단위·통합·빌드 — 하나라도 실패하면 중단 |
+| `npm run e2e:connection` / `e2e:admin` / `e2e:relay` | 실행 중인 서버 대상 HTTP E2E (`E2E_BASE_URL`) |
+| `npm run relay` | Oracle relay (`gateway/README.md`) |
 | `npm run assets:backgrounds` | 기본 풍경 배경 webp 재생성 (코드로 생성, 외부 사진 없음) |
 
 ## 환경변수
+
+| 이름 | 용도 | Vercel |
+|---|---|---|
+| `NEXT_PUBLIC_FIREBASE_API_KEY` / `_AUTH_DOMAIN` / `_PROJECT_ID` / `_APP_ID` | Firebase 웹 설정 (공개 가능) | 필요 |
+| `NEXT_PUBLIC_APP_URL` | 배포 주소 | 필요 |
+| `FIREBASE_ADMIN_CREDENTIALS` | 서비스 계정 JSON(base64) | 필요 |
+| `LLM_PROVIDER`, `LLM_PROVIDER_API_KEY` | AI 답변 (openai / gpt-6-luna) | 필요 |
+| `OPERATOR_EMAILS` | 운영자 Google 이메일(쉼표 구분) | 필요 |
+| `CRON_SECRET` | 매일 만료 데이터 정리 cron 인증 | 필요 |
+| `GATEWAY_KEYRING` | relay 서명 키 `{"gw-01":"..."}` | Oracle relay 설치 시 |
+| `INTERNAL_JOB_SECRET` | 외부에서 job 재처리 호출 시 | 선택 |
+| `IMAGE_PROVIDER_API_KEY` | AI 배경 생성 (미구현, 미설정 표시) | 선택 |
+| `FIREBASE_STORAGE_BUCKET` | 기본값 `<projectId>.firebasestorage.app` | 선택 |
 
 `.env.example` 을 `.env.local` 로 복사해 채운다. 비어 있는 기능은 "미설정"으로 표시되고 demo 는 그대로 동작한다.
 비밀값은 `NEXT_PUBLIC_` 으로 시작하면 안 되며 git 에 올리지 않는다.

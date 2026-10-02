@@ -62,7 +62,7 @@ if (cmd === "send") {
   await post("outbox", {});
 } else if (cmd === "ack") {
   // 송신 결과 보고. unknown 은 자동 재전송되지 않는다.
-  await post(`deliveries/${encodeURIComponent(opt("id"))}/ack`, { result: opt("result", "sent") });
+  await post("ack", { deliveryId: opt("id"), result: opt("result", "sent") });
 } else if (cmd === "heartbeat") {
   await post("heartbeat", { gatewayId, status: "ok", adapterVersion: "mock-0.1.0", observedAt: new Date().toISOString() });
 } else {

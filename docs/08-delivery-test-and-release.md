@@ -209,3 +209,24 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 | `npm run e2e:relay` (relay 실제 프로세스 + mock 어댑터 + 실제 web·Firestore·gpt-6-luna) | 9단계 ×2회 ALL PASSED — web 다운 중 수신 이벤트 SQLite 보존 → 재시작 후 같은 eventId 전달·연결, 중복 콜백 1회만 저장, 연결 안내·실제 AI 답변 방 송신, ack sent, 봇 자기 메시지 재유입 ignored_self, 송신 timeout → unknown 보고 → 재전송 없음 |
 | unit (`relay-adapter.test.ts`) | 큰 숫자 ID 문자열 유지·sender hash·native ID 없을 때 결정적 eventId·필수값 없으면 폐기 |
 | `npm run verify` | unit 30 · integration 25 · build 통과 |
+
+### 2026-10-05 변경 — Storage 전환 · 운영자 이메일 · 자동 정리 · 버그 수정
+**사용자 결정**
+- 배경 이미지 저장을 Firebase Storage(`kakaobot-6fea2.firebasestorage.app`, asia-northeast3)로 전환. draft 는 비공개 객체(운영자만 `/api/v1/appearance/files` 로 미리보기), 적용 시 객체 공개 + `public, max-age=31536000, immutable` 로 `storage.googleapis.com` URL 제공. Firestore Bytes 저장 제거. Storage 보안 규칙은 이미 전체 deny(클라이언트 SDK 차단) — `storage.rules` 로 저장.
+- 운영자 권한: `OPERATOR_EMAILS`(쉼표 구분, 서버 전용 env)에 있는 **Google 로그인 + Google 인증 이메일**을 superadmin 으로 인정. docs/05 "이메일 문자열로 권한을 판정하지 않는다"와 다른 운영 방식이며, 이메일 미인증·다른 provider·유사 도메인은 거부. custom claim(`npm run admin:grant`)도 계속 유효.
+
+**추가 구현**
+- 멈춘 AI job 재처리: relay 의 outbox poll(2초)마다 응답 후 1분 넘은 queued·lease 만료 processing job 을 2건씩 처리 (lease 로 중복 처리 방지).
+- 만료 데이터 수동 삭제: Vercel Cron 매일 03:00 KST `/api/internal/cron/cleanup` (CRON_SECRET) — 보관기간 지난 대화 로그, 오래된 이벤트·nonce·rate counter·draft·idempotency key·연결 코드.
+
+**버그 수정**
+- 간헐적 세션 검증 실패(로그인된 요청이 401/307): 원인은 경로별 모듈 인스턴스가 같은 Firestore 에 `settings()` 를 다시 호출해 나는 `already been initialized` 예외. 앞서 "dev 서버 재컴파일 탓"으로 추정했던 것은 틀렸음. 프로세스 전역 1회 설정으로 수정. 수정 후 admin E2E 3회 연속 통과, 오류 로그 재발 없음.
+- relay ack 경로: `/deliveries/:id/ack`(동적 2단계)가 새 dev 서버(Turbopack)에서 404 → `/api/internal/gateways/:gw/ack`(본문에 deliveryId)로 변경. 배포 환경은 기존 경로도 동작했음.
+
+| 검증 | 결과 |
+|---|---|
+| `tests/integration/appearance.test.ts` (Storage, 분리된 site 문서) | 3 통과 — draft 객체 공개 URL 403, 적용 후 200 + immutable, 나머지 기존 항목 |
+| `tests/integration/maintenance.test.ts` | 2 통과 — 만료 로그만 삭제, 1분 넘은 job 만 재처리 |
+| unit (`rbac.test.ts`) | OPERATOR_EMAILS: 인증된 Google 이메일만, 미인증·password provider·`…gmail.com.evil.com`·미설정 거부 |
+| `npm run verify` | unit 32 · integration 27 · build 통과 |
+| E2E (dev) | admin ×3, connection, relay 모두 ALL PASSED. Storage 남은 테스트 객체 0 |
