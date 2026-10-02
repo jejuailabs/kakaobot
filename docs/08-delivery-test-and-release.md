@@ -47,7 +47,8 @@ Vercelpreview/prod 분리, Cloudflarequeue/DLQ/secrets, Oraclefirewall+volume+sy
 |---|---|---|
 | S0 | **미실행** — Oracle 계정·VM 접근 없음 | 2026-10-02 |
 | S1 | **완료 (mock/demo)** | 2026-10-02 |
-| S2~S8 | 미구현 | — |
+| S2 | **진행 중** — 로그인·session·workspace·RBAC 구현, 실제 Google 로그인 수동 확인 대기 | 2026-10-02 |
+| S3~S8 | 미구현 | — |
 | S9 | 범위 외 | — |
 
 ### S0 — 미실행
@@ -87,3 +88,30 @@ Vercelpreview/prod 분리, Cloudflarequeue/DLQ/secrets, Oraclefirewall+volume+sy
 
 ## 시작 지시
 CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감사이력/배경업로드/AI 생성/일정까지포함한다. 배경을사용자가바꿔도 LiquidGlass 디자인이유지되게하라. 준비된실환경검증과테스트만완료로기록하라.
+
+### S2 — Google 인증·session·workspace·RBAC (2026-10-02, 진행 중)
+**구현**
+- Firebase 프로젝트 `kakaobot-6fea2`. 웹 설정은 `NEXT_PUBLIC_FIREBASE_*`, 서비스 계정은 `FIREBASE_ADMIN_CREDENTIALS`(base64) — 모두 `.env.local`(git 제외).
+- 로그인: Google popup → 차단 시 redirect fallback, 창 닫기는 오류로 보지 않음. ID token + double-submit CSRF + Origin 검사 → `POST /api/v1/auth/session` 에서 `verifyIdToken(checkRevoked)`, 5분 이내 로그인·google.com provider 만 허용 → HttpOnly·SameSite=Lax session cookie(5일, production 에서 Secure). `DELETE` 로 로그아웃(쿠키 제거 + client signOut).
+- 첫 로그인 시 transaction 으로 `users/{uid}`, `workspaces/ws_{uid}` 생성(기본 한도 bot 3개). workspace 는 항상 session uid 에서 결정.
+- `getSessionUser` 는 `verifySessionCookie(checkRevoked)` + users 문서 status 확인. 정지 회원은 콘솔 대신 정지 안내.
+- RBAC: Firebase custom claim `roles`(superadmin/support/analyst/designer)로만 판정, 이메일 문자열 사용 안 함. `/admin` 은 권한 없으면 404. 운영자 실데이터는 S6/S7.
+- 실제 콘솔은 Firestore 에서 본인 workspace 조건으로만 조회하며 demo 숫자 없음(빈 상태·0·—). 챗봇 생성 등은 S3 전까지 "아직 설정되지 않은 기능"으로 응답.
+- Firestore 규칙: 배포된 규칙이 이미 전체 deny 임을 Admin SDK 로 확인, 동일 내용을 `firestore.rules` 로 저장(배포 변경 없음).
+- 로컬 네트워크에서 Firestore gRPC 연결이 멈춰 `preferRest: true` 사용.
+
+**실행한 검증과 결과**
+| 명령/방법 | 결과 |
+|---|---|
+| `npm run check:firebase` | Auth OK, Firestore OK(컬렉션 0개) |
+| Identity Toolkit 설정 조회 | google.com provider enabled, 승인 도메인: localhost, kakaobot-6fea2.firebaseapp.com, kakaobot-6fea2.web.app, kakaobot-nine.vercel.app |
+| `curl` 음성 테스트 | Origin 없음/타 origin → 403, CSRF 없음 → 403, body 오류 → 400, 위조 ID token → 401, 위조 session cookie 로 `/ko/dashboard` → 307 `/login` |
+| `npm test` | 3 files, 19 tests 통과 (RBAC 4건 추가: designer 로그 불가, analyst 배경 publish 불가 등) |
+| `npm run build`, lint, typecheck | 통과 |
+| client bundle 에 서비스 계정 키/이메일 검색 | 검출 없음 |
+
+**미실행 / 미해결**
+- 실제 Google 계정 로그인 → users/workspaces 생성 → 대시보드 진입: **사용자 수동 확인 대기**.
+- Firebase Emulator 기반 A/B 격리 integration test, 정지 회원 API 거절 test: 미실행 (Emulator 미설치, S3 CRUD API 와 함께 작성 예정).
+- 운영자 role 부여 도구(custom claim 설정 스크립트): 미구현.
+- 서비스 계정 키가 대화창에 노출됨 → 로그인 확인 후 키 재발급(rotate) 권장.

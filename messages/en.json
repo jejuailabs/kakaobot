@@ -79,18 +79,42 @@
     "tabChat": "Chat",
     "featuresTitle": "Features",
     "features": {
-      "create": { "title": "Create", "desc": "Choose roles like AI Q&A, FAQ or notice drafts and set up a bot in 3 minutes." },
-      "connect": { "title": "Connect", "desc": "Once an operator joins your room, send a one-time code there to link it." },
-      "customize": { "title": "Customize", "desc": "Change the trigger, tone, length and prompt, with version history." },
-      "grow": { "title": "Grow", "desc": "Track handled messages and answer success rate with real numbers." }
+      "create": {
+        "title": "Create",
+        "desc": "Choose roles like AI Q&A, FAQ or notice drafts and set up a bot in 3 minutes."
+      },
+      "connect": {
+        "title": "Connect",
+        "desc": "Once an operator joins your room, send a one-time code there to link it."
+      },
+      "customize": {
+        "title": "Customize",
+        "desc": "Change the trigger, tone, length and prompt, with version history."
+      },
+      "grow": {
+        "title": "Grow",
+        "desc": "Track handled messages and answer success rate with real numbers."
+      }
     },
     "howTitle": "How connecting works",
     "howDesc": "A chat link alone never auto-joins a room or proves ownership. People verify each step so the connection stays safe.",
     "how": {
-      "step1": { "title": "Request a join", "desc": "Send the room name, link and admin consent." },
-      "step2": { "title": "Operator joins", "desc": "An operator confirms consent and joins the room manually." },
-      "step3": { "title": "Connection code", "desc": "Get a code valid for 10 minutes and post it in the room." },
-      "step4": { "title": "Ask with the trigger", "desc": "Start a message with the trigger, like “!AI your question”." }
+      "step1": {
+        "title": "Request a join",
+        "desc": "Send the room name, link and admin consent."
+      },
+      "step2": {
+        "title": "Operator joins",
+        "desc": "An operator confirms consent and joins the room manually."
+      },
+      "step3": {
+        "title": "Connection code",
+        "desc": "Get a code valid for 10 minutes and post it in the room."
+      },
+      "step4": {
+        "title": "Ask with the trigger",
+        "desc": "Start a message with the trigger, like “!AI your question”."
+      }
     },
     "footerNote": "Only messages that call the bot and its replies are stored. Regular room chat is never collected.",
     "preview": {
@@ -137,7 +161,12 @@
     "google": "Continue with Google",
     "unconfigured": "Google sign-in becomes available after Firebase is configured. You can explore every screen in the demo for now.",
     "demo": "Explore the demo without signing in",
-    "privacy": "By signing in you agree to the <link>privacy notice</link>."
+    "privacy": "By signing in you agree to the <link>privacy notice</link>.",
+    "errorInvalid": "We couldn't verify your sign-in. Please try again.",
+    "errorStale": "Your sign-in has expired. Please sign in again.",
+    "errorSuspended": "This account is suspended. Please contact the operator.",
+    "errorGeneric": "Sign-in failed. Please try again shortly.",
+    "errorDomain": "This address isn't an authorized domain for Google sign-in. Please contact the operator."
   },
   "privacy": {
     "title": "Privacy notice",
@@ -226,11 +255,26 @@
     }
   },
   "roles": {
-    "qa": { "title": "AI Q&A", "desc": "AI answers questions from room members." },
-    "faq": { "title": "FAQ", "desc": "Answers based on the Q&A you provide." },
-    "notice": { "title": "Notice drafts", "desc": "Drafts an announcement when asked." },
-    "search": { "title": "Web search", "desc": "Answers with search results as reference." },
-    "custom": { "title": "Custom", "desc": "Follows instructions you write." }
+    "qa": {
+      "title": "AI Q&A",
+      "desc": "AI answers questions from room members."
+    },
+    "faq": {
+      "title": "FAQ",
+      "desc": "Answers based on the Q&A you provide."
+    },
+    "notice": {
+      "title": "Notice drafts",
+      "desc": "Drafts an announcement when asked."
+    },
+    "search": {
+      "title": "Web search",
+      "desc": "Answers with search results as reference."
+    },
+    "custom": {
+      "title": "Custom",
+      "desc": "Follows instructions you write."
+    }
   },
   "tone": {
     "friendly": "Friendly",
@@ -486,7 +530,8 @@
     "botNotFoundDesc": "It was deleted or you don't have access.",
     "pageNotFound": "Page not found",
     "pageNotFoundDesc": "The address changed or the page doesn't exist.",
-    "goHome": "Go home"
+    "goHome": "Go home",
+    "forbidden": "You don't have permission."
   },
   "admin": {
     "reason": "Reason",
@@ -570,7 +615,10 @@
     "jobs": {
       "subtitle": "AI and background jobs that failed or have an unclear result.",
       "empty": "No failed jobs",
-      "kind": { "ai": "AI reply", "background": "Background" },
+      "kind": {
+        "ai": "AI reply",
+        "background": "Background"
+      },
       "attempt": "{count} attempts",
       "retry": "Retry",
       "manualResend": "Verify, then resend",
@@ -605,7 +653,11 @@
       "badType": "Only JPEG, PNG and WebP images are allowed. SVG and executables are blocked.",
       "tooSmall": "The image must be at least {min}px wide.",
       "uploaded": "Uploaded as a draft. Customers won't see it until it's applied.",
-      "group": { "active": "Applied", "draft": "Drafts", "previous": "Previous versions" },
+      "group": {
+        "active": "Applied",
+        "draft": "Drafts",
+        "previous": "Previous versions"
+      },
       "preview": "Preview",
       "device": "Device",
       "desktop": "Desktop",
@@ -617,14 +669,24 @@
       "deleteLater": "Asset deletion ships in S7 with server cleanup",
       "settings": "Settings",
       "scope": "Scope",
-      "scopes": { "all": "Everywhere", "dashboard": "Customer console", "landing": "Landing" },
+      "scopes": {
+        "all": "Everywhere",
+        "dashboard": "Customer console",
+        "landing": "Landing"
+      },
       "overlay": "Overlay opacity",
       "blur": "Background blur",
       "brightness": "Brightness",
       "panelNote": "The glass panel blur (24px) is kept separately from background blur.",
       "aiTitle": "Generate with AI",
       "aiUnconfigured": "No image generation API is configured. Uploads still work.",
-      "scenes": { "mountain": "Mountain", "lake": "Lake", "sea": "Sea", "forest": "Forest", "abstract": "Abstract" },
+      "scenes": {
+        "mountain": "Mountain",
+        "lake": "Lake",
+        "sea": "Sea",
+        "forest": "Forest",
+        "abstract": "Abstract"
+      },
       "generate": "Generate",
       "autoTitle": "Auto-generation schedule",
       "cycle": "Cycle",
@@ -643,6 +705,8 @@
       "asset": "Asset",
       "applied": "Background applied",
       "demoApplyNote": "In the demo only this list changes; the real site background stays the same."
-    }
+    },
+    "liveNotReadyTitle": "Operator data not connected yet",
+    "liveNotReadyDesc": "Your permission is confirmed. Real member, conversation and background data will be connected in the next stages (S6, S7). You can preview the screens in the demo."
   }
 }

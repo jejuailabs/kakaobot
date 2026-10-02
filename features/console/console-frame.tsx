@@ -7,13 +7,14 @@ import { ErrorBanner } from "@/components/glass/glass-card";
 import { AccountMenuLink, adminNav, GlassShell, userNav } from "@/components/glass/shell";
 import { MenuItem } from "@/components/ui/primitives";
 import { usePathname } from "@/i18n/navigation";
+import { LogoutItem } from "@/features/auth/logout-item";
 import { useConsole } from "./console-context";
 import { useRelativeTime } from "@/components/ui/use-relative-time";
 
 export function ConsoleFrame({ children }: { children: React.ReactNode }) {
   const t = useTranslations();
   const rel = useRelativeTime();
-  const { mode, snapshot, href, actions } = useConsole();
+  const { mode, snapshot, href, actions, canAdmin } = useConsole();
   const pathname = usePathname();
   const isAdmin = pathname === href("admin") || pathname.startsWith(`${href("admin")}/`);
   const demo = mode === "demo";
@@ -55,9 +56,9 @@ export function ConsoleFrame({ children }: { children: React.ReactNode }) {
           {t("nav.settings")}
         </AccountMenuLink>
       )}
-      {demo && !isAdmin && (
+      {!isAdmin && (demo || canAdmin) && (
         <AccountMenuLink href={href("admin")} icon="admin">
-          {t("nav.adminDemo")}
+          {demo ? t("nav.adminDemo") : t("nav.adminOverview")}
         </AccountMenuLink>
       )}
       {demo && actions.simulate && (
@@ -66,9 +67,13 @@ export function ConsoleFrame({ children }: { children: React.ReactNode }) {
           {t("demo.reset")}
         </MenuItem>
       )}
-      <AccountMenuLink href="/" icon="exit">
-        {demo ? t("demo.exit") : t("nav.logout")}
-      </AccountMenuLink>
+      {demo ? (
+        <AccountMenuLink href="/" icon="exit">
+          {t("demo.exit")}
+        </AccountMenuLink>
+      ) : (
+        <LogoutItem label={t("nav.logout")} />
+      )}
     </>
   );
 

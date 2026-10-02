@@ -50,6 +50,8 @@ export type ConsoleContextValue = {
   actions: ConsoleActions;
   /** 콘솔 내부 경로 → locale 제외 실제 URL */
   href(path: string): string;
+  /** 서버가 확인한 운영자 권한이 있을 때만 true. 메뉴 표시용이며 보호는 서버 layout 이 한다. */
+  canAdmin?: boolean;
 };
 
 const ConsoleContext = React.createContext<ConsoleContextValue | null>(null);

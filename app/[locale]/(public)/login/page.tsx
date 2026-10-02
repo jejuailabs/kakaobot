@@ -1,11 +1,12 @@
 import { ArrowRight, Info } from "lucide-react";
 import type { Metadata } from "next";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { GoogleMark } from "@/components/glass/google-mark";
 import { Button } from "@/components/ui/button";
+import { GoogleSignIn } from "@/features/auth/google-sign-in";
 import { PublicHeader } from "@/features/landing/public-header";
 import { Link } from "@/i18n/navigation";
 import { isFirebaseClientConfigured } from "@/lib/shared/config";
+import { isAdminConfigured } from "@/lib/server/firebase-admin";
 
 export async function generateMetadata({ params }: PageProps<"/[locale]/login">): Promise<Metadata> {
   const { locale } = await params;
@@ -17,7 +18,7 @@ export default async function LoginPage({ params }: PageProps<"/[locale]/login">
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("login");
-  const configured = isFirebaseClientConfigured();
+  const configured = isFirebaseClientConfigured() && isAdminConfigured();
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -28,11 +29,13 @@ export default async function LoginPage({ params }: PageProps<"/[locale]/login">
           <p className="mt-3 text-body text-muted">{t("subtitle")}</p>
 
           <div className="mt-8 flex flex-col gap-3">
-            {/* S2 에서 Firebase popup → redirect fallback 으로 연결된다. 미설정이면 비활성. */}
-            <Button size="lg" variant="secondary" className="w-full bg-white text-[#1f1f1f] dark:bg-white dark:text-[#1f1f1f]" disabled={!configured} aria-describedby={!configured ? "login-unconfigured" : undefined}>
-              <GoogleMark />
-              {t("google")}
-            </Button>
+            {configured ? (
+              <GoogleSignIn />
+            ) : (
+              <Button size="lg" variant="secondary" className="w-full" disabled aria-describedby="login-unconfigured">
+                {t("google")}
+              </Button>
+            )}
             {!configured && (
               <p id="login-unconfigured" className="flex items-start gap-2 rounded-[12px] bg-selected p-3 text-left text-label text-muted">
                 <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
