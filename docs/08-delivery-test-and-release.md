@@ -50,7 +50,8 @@ Vercelpreview/prod 분리, Cloudflarequeue/DLQ/secrets, Oraclefirewall+volume+sy
 | S2 | **완료** — 사용자가 배포 사이트에서 Google 로그인 성공 확인 | 2026-10-02 |
 | S3 | **완료** — 실제 Firestore CRUD·wizard draft·A/B 격리 통합 테스트 | 2026-10-02 |
 | S4 | **mock 완료 / live 미검증** — 입장요청·운영자 승인·연결코드·서명 ingress·원자적 연결. Oracle relay·Cloudflare Queue 미구현 | 2026-10-03 |
-| S5~S8 | 미구현 | — |
+| S5 | **완료 (로컬 실 API) / 배포 환경 키 미설정** — gpt-6-luna 실제 답변, 한도·예산·로그·outbox | 2026-10-04 |
+| S6~S8 | 미구현 | — |
 | S9 | 범위 외 | — |
 
 ### S0 — 미실행
@@ -158,3 +159,21 @@ CLAUDE.md 를읽고단계별구현하라. 회원 관리/수치/대화로그/감�
 **미실행 / 필요한 것**
 - 실제 카카오톡 방 연결(S0/S8): Oracle VM·ReDroid·KakaoTalk·Iris 필요. 배포 환경 gateway 키(`GATEWAY_KEYRING`) Vercel 미설정.
 - 운영자 계정 역할 미부여: `npm run admin:grant -- jejuailabs@gmail.com superadmin` 실행 후 재로그인 필요.
+
+### S5 — 비동기 AI·사용량 (2026-10-04)
+**결정**: 사용자 선택 `gpt-6-luna` (공식 가격 입력 $0.10 / 캐시 $0.01 / 출력 $0.50 per 1M, 2026-10-03 developers.openai.com 확인). 추론 모델이라 `reasoning.effort: "low"`, `store: false`. 키는 사용자 지시로 00_game_earth 의 OpenAI 키를 `.env.local` 에 복사(프로젝트 전용 키 교체 권장).
+
+**구현**: OpenAI Responses API provider(서버 allowlist, 25초 timeout, 확정 429/5xx 만 1s·4s 재시도, timeout 은 cost_unknown 으로 재시도 없음) · 프롬프트 순서 docs/07 · 로그 저장 전 키·연결코드 제거 · job lease claim · kill switch(`system/flags.killSwitch`) · workspace 20/분, 방 5/분, workspace 일 100, 봇 일일 한도, 월 예산($5 기본) reserve → 정산 · 대화 로그(보관기간 TTL) · outbox(`deliveries`) lease/ack(unknown 자동 재전송 없음) · ingress 응답 후 `after()` 처리 · `/api/internal/jobs/process`(INTERNAL_JOB_SECRET) · 콘솔 테스트 답변(wizard 저장 전 값 포함) · 실제 90일 사용량 차트.
+
+| 검증 | 결과 |
+|---|---|
+| 실제 gpt-6-luna 호출 (`tests/integration/llm.test.ts`) | 2.7초, 입력 221·출력 64 토큰, 약 $0.000055, 자연스러운 한국어 |
+| runtime 통합 (실제 Firestore + LLM) | 같은 job 동시 2회 → 답변 1·skip 1, 로그 1, reserve 0 으로 정산 / 봇 일일 한도 1 초과 → LLM 미호출·한도 안내 / kill switch → 처리 중단 |
+| `npm run e2e:connection` | 18단계 ALL PASSED — … 방 `!AI` → job → **실제 AI 답변이 outbox 로 relay 에 전달** → ack sent → 재lease 안 됨 → 대화 로그(3.4초, $0.000075) → 사용량 정산 |
+| unit / integration / build | 27 / 22 통과 / 통과. 테스트로 생긴 rateCounters 4건 정리 |
+| 배포 사이트 curl | 테스트 답변 세션 없이 401, jobs/process secret 없이 401, 미서명 outbox 401 |
+
+**미실행 / 필요한 것**
+- 배포 환경 실제 답변: Vercel 에 `LLM_PROVIDER=openai`, `LLM_PROVIDER_API_KEY` 미설정 → 배포 사이트 테스트 답변은 "설정되지 않음" 응답.
+- Cloudflare Queue 대신 `after()` 처리(MVP). 처리 못 한 job 을 주기적으로 다시 처리하는 scheduler 미구현.
+- 실제 카카오톡 송수신은 S0/S8.
