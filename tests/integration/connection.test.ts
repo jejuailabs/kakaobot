@@ -14,6 +14,8 @@ const operator = { uid: "test-operator", roles: ["superadmin"] };
 const input = (name: string) => ({ name, description: "", roomUrl: "", locale: "ko", timezone: "Asia/Seoul", roles: ["qa"], faq: "", customPrompt: "", trigger: "!AI", tone: "friendly", length: "normal", replyLocale: "ko", modelId: "default", dailyLimit: 100 });
 const join = { url: "", roomLabel: "테스트방", permissionConfirmed: true, noticeConfirmed: true };
 let seq = 0;
+// 동시 연결 테스트에서 이긴 방 (어느 쪽이 이길지는 매번 다르다)
+let boundRoom = "";
 const ev = (roomId: string, text: string, extra: Partial<NormalizedEvent> = {}): NormalizedEvent => {
   const messageId = `${run}-${++seq}`;
   return { schemaVersion: 1, eventId: `${GW}:${messageId}`, gatewayId: GW, roomId, senderId: "s1", messageId, text, receivedAt: new Date().toISOString(), isSelf: false, kind: "text", ...extra };
@@ -56,6 +58,7 @@ describe("room connection (real Firestore)", () => {
     const { code } = await issuePairingCode(A, bot.id);
     const [r1, r2] = await Promise.all([claimRoom({ gatewayId: GW, roomId: "9001", eventId: `${run}-x1` }, code), claimRoom({ gatewayId: GW, roomId: "9002", eventId: `${run}-x2` }, code)]);
     expect([r1.ok, r2.ok].filter(Boolean)).toHaveLength(1);
+    boundRoom = r1.ok ? "9001" : "9002";
     const bindings = await adminDb().collection("roomBindings").where("botId", "==", bot.id).get();
     expect(bindings.size).toBe(1);
     expect((await adminDb().collection("bots").doc(bot.id).get()).data()?.state).toBe("active");
@@ -64,7 +67,7 @@ describe("room connection (real Firestore)", () => {
   it("이미 연결된 방은 다른 고객의 코드로 가져갈 수 없다", async () => {
     const botB = await readyBot(B, "B봇", `k-${run}-b`);
     const { code } = await issuePairingCode(B, botB.id);
-    const r = await claimRoom({ gatewayId: GW, roomId: "9001", eventId: `${run}-x3` }, code);
+    const r = await claimRoom({ gatewayId: GW, roomId: boundRoom, eventId: `${run}-x3` }, code);
     expect(r).toEqual({ ok: false, reason: "room_taken" });
   });
 
@@ -82,20 +85,20 @@ describe("room connection (real Firestore)", () => {
   });
 
   it("방 이벤트: 중복은 한 번만, 일반 대화·자기 메시지는 무시, 호출어는 job 1개", async () => {
-    const e1 = ev("9001", "!AI 내일 날씨?");
+    const e1 = ev(boundRoom, "!AI 내일 날씨?");
     expect((await ingestEvent(e1)).outcome).toBe("queued");
     expect((await ingestEvent(e1)).outcome).toBe("duplicate");
-    expect((await ingestEvent(ev("9001", "그냥 대화"))).outcome).toBe("ignored_no_trigger");
-    expect((await ingestEvent(ev("9001", "!AI 나 자신", { isSelf: true }))).outcome).toBe("ignored_self");
+    expect((await ingestEvent(ev(boundRoom, "그냥 대화"))).outcome).toBe("ignored_no_trigger");
+    expect((await ingestEvent(ev(boundRoom, "!AI 나 자신", { isSelf: true }))).outcome).toBe("ignored_self");
     expect((await ingestEvent(ev("9999", "!AI 미연결 방"))).outcome).toBe("ignored_unbound");
     const jobs = await adminDb().collection("jobs").where("workspaceId", "==", A).get();
     expect(jobs.size).toBe(1);
   });
 
   it("일시정지한 봇의 방은 처리하지 않는다", async () => {
-    const binding = (await adminDb().collection("roomBindings").doc(`${GW}__9001`).get()).data()!;
+    const binding = (await adminDb().collection("roomBindings").doc(`${GW}__${boundRoom}`).get()).data()!;
     const bot = (await adminDb().collection("bots").doc(binding.botId).get()).data()!;
     await setPaused(A, binding.botId, true, bot.version);
-    expect((await ingestEvent(ev("9001", "!AI 멈춤 상태"))).outcome).toBe("ignored_unbound");
+    expect((await ingestEvent(ev(boundRoom, "!AI 멈춤 상태"))).outcome).toBe("ignored_unbound");
   });
 });
