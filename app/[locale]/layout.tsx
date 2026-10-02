@@ -45,7 +45,6 @@ export default async function LocaleLayout({ children, params }: LayoutProps<"/[
   return (
     <html lang={locale} suppressHydrationWarning className={`${pretendard.variable} ${inter.variable}`}>
       <head>
-        <link rel="preload" as="image" href={appearance.dark.desktopUrl} media="(min-width: 768px)" />
         <style id="katcha-appearance" dangerouslySetInnerHTML={{ __html: appearanceCss(appearance) }} />
       </head>
       <body>

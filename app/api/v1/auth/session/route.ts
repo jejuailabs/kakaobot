@@ -24,6 +24,17 @@ function guard(req: NextRequest) {
 
 /** POST /api/v1/auth/session — Firebase ID token → HttpOnly session cookie */
 export async function POST(req: NextRequest) {
+  try {
+    return await createSession(req);
+  } catch (e) {
+    // 예상하지 못한 오류: 원인 코드만 서버 로그에 남기고 고객에게는 stacktrace 를 주지 않는다.
+    const body = errorBody("internal", "login.errorGeneric");
+    console.error("[auth/session] unexpected", { requestId: body.error.requestId, code: (e as { code?: unknown }).code, message: (e as Error).message?.slice(0, 200) });
+    return NextResponse.json(body, { status: 500 });
+  }
+}
+
+async function createSession(req: NextRequest) {
   const blocked = guard(req);
   if (blocked) return blocked;
   if (!isAdminConfigured()) return NextResponse.json(errorBody("not_configured", "errors.not_configured"), { status: 503 });
@@ -61,7 +72,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(errorBody("account_suspended", "login.errorSuspended"), { status: 403 });
   }
 
-  const sessionCookie = await adminAuth().createSessionCookie(parsed.data.idToken, { expiresIn: SESSION_MAX_AGE_MS });
+  let sessionCookie: string;
+  try {
+    sessionCookie = await adminAuth().createSessionCookie(parsed.data.idToken, { expiresIn: SESSION_MAX_AGE_MS });
+  } catch (e) {
+    const body = errorBody("session_create_failed", "login.errorGeneric");
+    console.error("[auth/session] createSessionCookie failed", { requestId: body.error.requestId, code: (e as { code?: unknown }).code });
+    return NextResponse.json(body, { status: 500 });
+  }
   const res = NextResponse.json({ ok: true });
   res.cookies.set(SESSION_COOKIE, sessionCookie, {
     httpOnly: true,
