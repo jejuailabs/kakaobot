@@ -1,0 +1,303 @@
+@import "tailwindcss";
+
+/* 다크 모드는 next-themes 가 <html class="dark"> 로 제어한다. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ───────────────── Liquid Glass 토큰 (docs/02) ─────────────────
+   정규화 토큰이며 원본 픽셀 측정값이 아니다. 대비 검사 후 불투명도를 조정한다.
+   .theme-light/.theme-dark 는 어드민 배경 preview 처럼 일부 영역만 다른 테마로 볼 때 쓴다. */
+:root,
+.theme-light {
+  --background: #eaf5fa;
+  --text: #163047;
+  --text-muted: #486579;
+  --primary: #136d91;
+  --primary-foreground: #ffffff;
+  --accent: #7764c5;
+  --success: #13785d;
+  --warning: #8a5c0d;
+  --danger: #ad3154;
+  --glass-fill: rgba(255, 255, 255, 0.72);
+  --card-fill: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.88);
+  --glass-inset: rgba(255, 255, 255, 0.95);
+  --input-fill: rgba(255, 255, 255, 0.94);
+  --surface-solid: #f4f9fc;
+  --selected-fill: rgba(19, 109, 145, 0.08);
+  --grid-line: rgba(22, 48, 71, 0.1);
+  --kakao: #fee500;
+  --kakao-foreground: #191600;
+  --shadow-panel: 0 24px 64px rgba(3, 20, 38, 0.16);
+  --shadow-card: 0 8px 24px rgba(4, 28, 44, 0.08);
+
+  /* 배경 manifest 가 바인딩하는 변수 (lib/shared/appearance.ts) */
+  --bg-image: none;
+  --bg-image-mobile: none;
+  --bg-overlay: rgba(234, 245, 250, 0.2);
+  --bg-blur: 0px;
+  --bg-brightness: 1;
+  --bg-focus: 50% 55%;
+  --bg-focus-mobile: 40% 50%;
+  --bg-fallback: linear-gradient(180deg, #cfe8f4 0%, #d9e2f7 38%, #f1dfe3 62%, #c6e3ea 100%);
+
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23486579' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+  --radius-panel: 28px;
+  --radius-card: 18px;
+  --radius-control: 12px;
+}
+
+.dark,
+.theme-dark {
+  --background: #0a2336;
+  --text: #f4faff;
+  --text-muted: #c8d9e6; /* docs/02 #BDD0DF → 대비 검사로 조정 */
+  --primary: #a6e9ff;
+  --primary-foreground: #082d42;
+  --accent: #bdafff;
+  --success: #86edcb;
+  --warning: #ffd98a;
+  --danger: #ffb8c6;
+  --glass-fill: rgba(30, 73, 103, 0.78); /* .62 → 밝은 배경 위 4.5:1 확보 */
+  --card-fill: rgba(64, 104, 134, 0.3);
+  --glass-border: rgba(223, 245, 255, 0.35);
+  --glass-inset: rgba(223, 245, 255, 0.45);
+  --input-fill: rgba(9, 36, 56, 0.78);
+  --surface-solid: #173d56;
+  --selected-fill: rgba(166, 233, 255, 0.08);
+  --grid-line: rgba(255, 255, 255, 0.08);
+  --shadow-panel: 0 24px 64px rgba(3, 20, 38, 0.24);
+  --shadow-card: 0 8px 24px rgba(4, 28, 44, 0.12);
+  --bg-overlay: rgba(6, 26, 42, 0.18);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23BDD0DF' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --bg-fallback: linear-gradient(180deg, #10304a 0%, #1d4a63 35%, #4a5a86 58%, #2b5f73 78%, #0d2d40 100%);
+}
+
+@theme inline {
+  --color-bg: var(--background);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-glass: var(--glass-fill);
+  --color-card: var(--card-fill);
+  --color-glass-border: var(--glass-border);
+  --color-input: var(--input-fill);
+  --color-surface: var(--surface-solid);
+  --color-selected: var(--selected-fill);
+  --color-kakao: var(--kakao);
+  --color-kakao-fg: var(--kakao-foreground);
+
+  --font-sans: var(--font-inter), var(--font-pretendard), "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: Georgia, "Times New Roman", var(--font-pretendard), serif;
+
+  --radius-panel: 28px;
+  --radius-card: 18px;
+  --radius-control: 12px;
+
+  /* docs/02 타이포 스케일 */
+  --text-hero: 64px;
+  --text-hero--line-height: 68px;
+  --text-heading: 24px;
+  --text-heading--line-height: 32px;
+  --text-section: 18px;
+  --text-section--line-height: 26px;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-label: 13px;
+  --text-label--line-height: 20px;
+  --text-caption: 12px;
+  --text-caption--line-height: 18px;
+  --text-kpi: 28px;
+  --text-kpi--line-height: 34px;
+}
+
+html:lang(ja) body {
+  font-family: var(--font-inter), "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", var(--font-pretendard), system-ui, sans-serif;
+}
+
+html {
+  background: var(--background);
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  /* 배경색은 html 에 둔다. body 가 칠하면 z-index:-1 의 풍경 레이어를 덮는다. */
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 22px;
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+html:lang(ja) body,
+html:lang(en) body {
+  word-break: normal;
+}
+
+/* ───────────────── 배경 레이어 ───────────────── */
+.glass-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--bg-fallback);
+  overflow: hidden;
+}
+.glass-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--bg-blur) * -2);
+  background-image: var(--bg-image);
+  background-size: cover;
+  background-position: var(--bg-focus);
+  filter: blur(var(--bg-blur)) brightness(var(--bg-brightness));
+}
+.glass-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--bg-overlay);
+}
+@media (max-width: 767px) {
+  .glass-backdrop::before {
+    background-image: var(--bg-image-mobile, var(--bg-image));
+    background-position: var(--bg-focus-mobile);
+  }
+}
+
+/* ───────────────── 유리 재질 ───────────────── */
+.glass-panel {
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 1px 1px 0 0 var(--glass-inset),
+    var(--shadow-panel);
+  -webkit-backdrop-filter: blur(24px) saturate(135%);
+  backdrop-filter: blur(24px) saturate(135%);
+}
+.glass-card {
+  background: var(--card-fill);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  box-shadow:
+    inset 1px 1px 0 0 var(--glass-inset),
+    var(--shadow-card);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.glass-solid {
+  background: var(--surface-solid);
+  border: 1px solid var(--glass-border);
+}
+
+/* backdrop-filter 미지원 또는 성능 모드 → 불투명 surface fallback */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-panel,
+  .glass-card {
+    background: var(--surface-solid);
+  }
+}
+html[data-perf="low"] .glass-panel,
+html[data-perf="low"] .glass-card {
+  background: var(--surface-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.glass-selected {
+  outline: 1px solid var(--primary);
+  outline-offset: -1px;
+  background-image: linear-gradient(var(--selected-fill), var(--selected-fill));
+  box-shadow:
+    inset 1px 1px 0 0 var(--glass-inset),
+    0 0 16px color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.glass-hover {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+.glass-hover:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 1px 1px 0 0 var(--glass-inset),
+    var(--shadow-card),
+    0 0 16px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* focus-visible: 2px primary outline + 3px offset */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .glass-hover:hover {
+    transform: none;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 스켈레톤: 지속 움직임 금지 → 정적 음영 */
+.skeleton {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: 8px;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-sheet-in {
+  animation: sheet-in 220ms ease-out;
+}
+.animate-sheet-up {
+  animation: sheet-up 220ms ease-out;
+}
+.animate-fade-in {
+  animation: fade-in 160ms ease-out;
+}
